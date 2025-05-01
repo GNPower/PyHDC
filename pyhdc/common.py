@@ -13,3 +13,14 @@ def hello(name):
         name (str): The name to print.
     """
     print(f"Hello {name}!")
+
+def add(a, b):
+    """Adds two numbers.
+
+    Args:
+        a (int): Number a.
+        b (int): Number b.
+    Returns:
+        (int): sum
+    """
+    return a + b
