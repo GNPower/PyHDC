@@ -1,0 +1,27 @@
+name: Testing
+description: Unit testing with PyTest of the PyHDC package
+
+runs:
+    using: composite
+    steps:
+        - uses: actions/checkout@v4
+        - name: Set up Python
+          shell: bash
+          uses: actions/setup-python@v5
+          with:
+            python-version: ${{ matrix.python-version }}
+        - name: Install dependancies
+          shell: bash
+          run: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install -r requirements_dev.txt
+            pip install .
+        - name: Test
+          shell: bash
+          run: |
+            coverage run -m pytest -v -s
+        - name: Generate Coverage Report
+          shell: bash
+          run: |
+            coverage report -m

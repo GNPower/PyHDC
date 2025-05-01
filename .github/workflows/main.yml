@@ -1,0 +1,37 @@
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+        branches:
+            - main
+
+name: branch/main
+jobs:
+    install:
+        runs-on: ${{ matrix.os }}
+        name: ${{ matrix.os }} (${{ matrix.python-version}})
+
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ["ubuntu-latest", "windows-latest", "macOS-latest"]
+                python-version: ["3.8", "3.9", "3.10", "3.11"]
+
+        steps:
+          - name: install
+            uses: ./.github/install
+
+    # test:
+    #     runs-on: ${{ matrix.os }}
+    #     name: ${{ matrix.os }} (${{ matrix.python-version}})
+
+    #     strategy:
+    #         fail-fast: false
+    #         matrix:
+    #             os: ["ubuntu-latest"]
+    #             python-version: ["3.8", "3.9", "3.10", "3.11"]
+
+    #     steps:
+    #       - name: test
+    #         uses: ./.github/test

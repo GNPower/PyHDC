@@ -1,6 +1,6 @@
 # Unit Testing
 pytest
-
+pytest-cov
 
 # black
 # black[jupyter]
