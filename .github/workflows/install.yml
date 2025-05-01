@@ -2,21 +2,25 @@ on:
     push:
         branches:
             - main
-            - master
+            - dev
     pull_request:
         branches:
             - main
-            - master
+            - dev
 
-
-name: Linux installation
+name: Installation
 jobs:
-    test-ubuntu:
-        runs-on: ubuntu-latest
+    install:
+        runs-on: ${{ matrix.os }}
+        name: ${{ matrix.os }} (${{ matrix.python-version}})
+
         strategy:
             fail-fast: false
             matrix:
-                python-version: ["3.11"]
+                os: ["ubuntu-latest", "windows-latest", "macOS-latest"]
+                # os: ["windows-latest"]
+                python-version: ["3.8", "3.9", "3.10", "3.11"]
+                # python-version: ["3.11"]
 
         steps:
             - uses: actions/checkout@v4
@@ -24,7 +28,6 @@ jobs:
               uses: actions/setup-python@v5
               with:
                   python-version: ${{ matrix.python-version }}
-
             - name: Install package
               run: pip install .
             - name: Test import
