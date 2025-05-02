@@ -7,3 +7,7 @@ autoflake
 isort
 pylint
 black
+
+# Documentation
+sphinx
+sphinx_rtd_theme
