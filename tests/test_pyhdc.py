@@ -4,7 +4,6 @@
 
 import pytest
 
-
 from pyhdc import common
 
 
