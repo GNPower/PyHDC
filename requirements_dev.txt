@@ -3,4 +3,7 @@ pytest
 pytest-cov
 
 # Linting and Static Analysis
+autoflake
+isort
+pylint
 black
