@@ -39,10 +39,10 @@ jobs:
                 isort .
             - name: Run Pylint (Static analysis)
               run: |
-                pylint --rcfile=.pylintrc $(git ls-files '*.py')
+                pylint --recursive=y --rcfile=pyproject.toml tests pyhdc
             - name: Run Black (Code Formatter)
               run: |
-                black $(git ls-files '*.py')
+                black --diff --color --check --verbose tests pyhdc
             - name: Git Auto Commit
               uses: stefanzweifel/git-auto-commit-action@v5
               with:
