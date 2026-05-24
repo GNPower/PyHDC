@@ -77,6 +77,10 @@ replace = '__version__ = "{new_version}"'
 target-version = ["py38", "py39", "py310", "py311"]
 line-length = 88
 
+[tool.isort]
+profile = "black"
+line_length = 88
+
 [tool.flake8]
 exclude = [
     "docs",

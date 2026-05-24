@@ -41,13 +41,12 @@ __version__ = "0.0.1"
 __author__ = "GNPower"
 
 # Submodules are available for direct import
-# Recovery algorithms from recovery module
-from pyhdc import components, generation, recovery
+from pyhdc import components
 
 # Encodings from encodings module
+from pyhdc.encodings import BSDC_CDT  # Binary; Holographic; MAP; Matrix
 from pyhdc.encodings import (
     BSC,
-    BSDC_CDT,  # Binary; Holographic; MAP; Matrix
     BSDC_S,
     BSDC_SEG,
     FHRR,
