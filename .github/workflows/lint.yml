@@ -8,6 +8,10 @@ on:
             - dev
 
 name: Static Analysis and Linting
+
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
     lint:
         runs-on: ${{ matrix.os }}

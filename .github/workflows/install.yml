@@ -8,6 +8,10 @@ on:
             - dev
 
 name: Install
+
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
     install:
         runs-on: ${{ matrix.os }}
