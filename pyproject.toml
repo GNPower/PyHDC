@@ -51,7 +51,7 @@ extra = [
 [tool]
 [tool.setuptools.packages.find]
 include = ["pyhdc*"]
-exclude = ["docs*", "pyhdc.generation*", "pyhdc.recovery*"]
+exclude = ["docs*", "pyhdc.recovery*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

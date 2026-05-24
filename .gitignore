@@ -109,7 +109,6 @@ ENV/
 
 # Modules deferred to a future release (insufficient test coverage for v1.0.0)
 # These will be re-introduced once test coverage meets the project standard.
-pyhdc/generation/
 pyhdc/recovery/
 tests/test_generation.py
 tests/test_recovery.py
