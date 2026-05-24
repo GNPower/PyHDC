@@ -1,30 +1,46 @@
-# This workflows will upload a Python Package using Twine when a release is created
-# For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
-
-name: pypi
+name: Publish to TestPyPI
 
 on:
-    release:
-        types: [created]
+    workflow_dispatch:
+
+permissions:
+    id-token: write
+    contents: read
 
 jobs:
-    deploy:
+    build:
         runs-on: ubuntu-latest
-
         steps:
             - uses: actions/checkout@v4
             - name: Set up Python
               uses: actions/setup-python@v5
               with:
-                  python-version: "3.x"
-            - name: Install dependencies
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install setuptools wheel twine build
-            - name: Build and publish
-              env:
-                  TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-                  TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-              run: |
-                  python -m build
-                  twine upload dist/*
+                  python-version: "3.11"
+            - name: Install build tools
+              run: pip install build
+            - name: Build package
+              run: python -m build
+            - name: Store distribution artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: python-package-distributions
+                  path: dist/
+
+    publish-test:
+        needs: build
+        runs-on: ubuntu-latest
+        environment:
+            name: testpypi
+            url: https://test.pypi.org/p/PyHDC
+        permissions:
+            id-token: write
+        steps:
+            - name: Download distributions
+              uses: actions/download-artifact@v4
+              with:
+                  name: python-package-distributions
+                  path: dist/
+            - name: Publish to TestPyPI
+              uses: pypa/gh-action-pypi-publish@release/v1
+              with:
+                  repository-url: https://test.pypi.org/legacy/

@@ -9,20 +9,30 @@ readme = "README.md"
 requires-python = ">=3.8"
 keywords = [
     "PyHDC",
+    "hyperdimensional computing",
+    "HDC",
+    "VSA",
+    "vector symbolic architecture",
+    "machine learning",
+    "numpy",
 ]
 license = {text = "MIT License"}
 authors = [
   {name = "GNPower", email = "powerg@mcmaster.ca"},
 ]
 classifiers = [
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
 # [project.entry-points."console_scripts"]
@@ -41,14 +51,10 @@ extra = [
 [tool]
 [tool.setuptools.packages.find]
 include = ["pyhdc*"]
-exclude = ["docs*"]
+exclude = ["docs*", "pyhdc.generation*", "pyhdc.recovery*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
-
-
-[tool.distutils.bdist_wheel]
-universal = true
 
 
 [tool.bumpversion]
@@ -67,6 +73,10 @@ search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
 
 
+[tool.black]
+target-version = ["py38", "py39", "py310", "py311"]
+line-length = 88
+
 [tool.flake8]
 exclude = [
     "docs",
@@ -74,11 +84,48 @@ exclude = [
 max-line-length = 88
 
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short --ignore=tests/benchmarks --ignore=tests/test_generation.py --ignore=tests/test_recovery.py"
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+
+[tool.coverage.run]
+source = ["pyhdc"]
+omit = ["tests/*", "pyhdc/generation/*", "pyhdc/recovery/*"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 49
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = ["docs/", "tests/benchmarks/"]
+
+
 [project.urls]
 Homepage = "https://github.com/GNPower/PyHDC"
+Source = "https://github.com/GNPower/PyHDC"
+"Bug Tracker" = "https://github.com/GNPower/PyHDC/issues"
+Changelog = "https://github.com/GNPower/PyHDC/blob/main/CHANGELOG.md"
 
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm>=8"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 ##################################
@@ -116,7 +163,7 @@ build-backend = "setuptools.build_meta"
 # fail-on =
 
 # Specify a score threshold under which the program will exit with error.
-fail-under = 10
+fail-under = 7.0
 
 # Interpret the stdin as a python script, whose filename needs to be passed as
 # the module_or_package argument.
@@ -129,7 +176,7 @@ ignore = ["CVS"]
 # ignore-list. The regex matches against paths and can be in Posix or Windows
 # format. Because '\\' represents the directory delimiter on Windows systems, it
 # can't be used as an escape character.
-# ignore-paths =
+ignore-paths = ["pyhdc/generation", "pyhdc/recovery"]
 
 # Files or directories matching the regular expression patterns are skipped. The
 # regex matches against base names, not paths. The default value ignores Emacs

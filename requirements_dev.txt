@@ -1,12 +1,23 @@
 # Unit Testing
 pytest
 pytest-cov
+pytest-benchmark
+
+# Type Checking
+mypy
 
 # Linting and Static Analysis
 autoflake
 isort
 pylint
 black
+flake8
+
+# Security
+bandit
+
+# Pre-commit hooks
+pre-commit
 
 # Documentation
 sphinx
