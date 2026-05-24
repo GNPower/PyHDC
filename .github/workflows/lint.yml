@@ -1,0 +1,75 @@
+on:
+    push:
+        branches-ignore:
+          - dev
+    pull_request:
+        branches:
+            - main
+            - dev
+
+name: Static Analysis and Linting
+
+env:
+    FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+    lint:
+        runs-on: ${{ matrix.os }}
+        name: ${{ matrix.os }} (${{ matrix.python-version}})
+
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ["ubuntu-latest"]
+                python-version: ["3.11"]
+
+        steps:
+            - uses: actions/checkout@v4
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: ${{ matrix.python-version }}
+            - name: Install package
+              run: |
+                python -m pip install --upgrade pip
+                pip install -r requirements.txt
+                pip install -r requirements_dev.txt
+                pip install .
+            - name: Autoflake (Unused Imports)
+              run: |
+                autoflake --remove-all-unused-imports --in-place -r .
+            - name: Run Isort (Import sorting)
+              run: |
+                isort .
+            - name: Run Pylint (Static analysis)
+              run: |
+                pylint --recursive=y --rcfile=pyproject.toml tests pyhdc
+            - name: Run Black (Code Formatter)
+              run: |
+                black --diff --color --check --verbose tests pyhdc
+            - name: Run mypy (Type Checking)
+              run: |
+                mypy pyhdc --ignore-missing-imports
+              continue-on-error: true
+            - name: Git Auto Commit
+              uses: stefanzweifel/git-auto-commit-action@v5
+              with:
+                commit_message: Static Analysis & Linting Changes
+
+    security:
+        runs-on: ubuntu-latest
+        name: Security Scan
+
+        steps:
+            - uses: actions/checkout@v4
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: "3.11"
+            - name: Install bandit
+              run: |
+                python -m pip install --upgrade pip
+                pip install bandit
+            - name: Run Bandit (Security Analysis)
+              run: |
+                bandit -r pyhdc -ll

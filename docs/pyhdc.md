@@ -1,4 +1,0 @@
-
-# pyhdc module
-
-::: pyhdc.pyhdc

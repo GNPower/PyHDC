@@ -1,10 +1,10 @@
-name: Publish to PyPI
+name: Publish to TestPyPI
 
 on:
-    release:
-        types: [published]
+    workflow_dispatch:
 
 permissions:
+    id-token: write
     contents: read
 
 env:
@@ -13,8 +13,6 @@ env:
 jobs:
     build:
         runs-on: ubuntu-latest
-        name: Build distribution
-
         steps:
             - uses: actions/checkout@v4
             - name: Set up Python
@@ -22,32 +20,30 @@ jobs:
               with:
                   python-version: "3.11"
             - name: Install build tools
-              run: |
-                  python -m pip install --upgrade pip
-                  pip install build
-            - name: Build wheel and sdist
+              run: pip install build
+            - name: Build package
               run: python -m build
-            - name: Upload distribution artifacts
+            - name: Store distribution artifacts
               uses: actions/upload-artifact@v4
               with:
-                  name: dist
+                  name: python-package-distributions
                   path: dist/
 
-    publish:
+    publish-test:
         needs: build
         runs-on: ubuntu-latest
-        name: Publish to PyPI
         environment:
-            name: pypi
-            url: https://pypi.org/p/PyHDC
+            name: testpypi
+            url: https://test.pypi.org/p/PyHDC
         permissions:
             id-token: write
-
         steps:
-            - name: Download distribution artifacts
+            - name: Download distributions
               uses: actions/download-artifact@v4
               with:
-                  name: dist
+                  name: python-package-distributions
                   path: dist/
-            - name: Publish to PyPI
+            - name: Publish to TestPyPI
               uses: pypa/gh-action-pypi-publish@release/v1
+              with:
+                  repository-url: https://test.pypi.org/legacy/

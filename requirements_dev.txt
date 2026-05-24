@@ -1,29 +1,24 @@
+# Unit Testing
+pytest
+pytest-cov
+pytest-benchmark
+
+# Type Checking
+mypy
+
+# Linting and Static Analysis
+autoflake
+isort
+pylint
 black
-black[jupyter]
-build
-bump-my-version
-click
-codespell
 flake8
 
-ipykernel
-livereload
-mkdocs
-mkdocs-git-revision-date-localized-plugin
-mkdocs-git-revision-date-plugin
-mkdocs-jupyter>=0.24.0
-mkdocs-material>=9.1.3
-mkdocs-pdf-export-plugin
-mkdocstrings==0.28.2
-mkdocstrings-crystal
-mkdocstrings-python-legacy
-nbconvert
-nbformat
-pygments
-pymdown-extensions
-pytest
-pytest-runner
+# Security
+bandit
+
+# Pre-commit hooks
+pre-commit
+
+# Documentation
 sphinx
-twine
-watchdog
-wheel
+sphinx_rtd_theme

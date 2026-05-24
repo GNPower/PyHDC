@@ -88,6 +88,7 @@ celerybeat-schedule
 # virtualenv
 .venv
 venv/
+env/
 ENV/
 
 # Spyder project settings
@@ -105,3 +106,9 @@ ENV/
 
 # IDE settings
 .vscode/
+
+# Modules deferred to a future release (insufficient test coverage for v1.0.0)
+# These will be re-introduced once test coverage meets the project standard.
+pyhdc/recovery/
+!pyhdc/recovery/__init__.py
+tests/test_recovery.py
