@@ -1,28 +1,19 @@
 import numpy as np
 
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
 
-def CosineSimilarity(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """CosineSimilarity Cosine Similarity of two vectors
-
-    cos(θ) = ( A dot B ) / ( norm(A) * norm(B) )
-
-
-    :param a: hypervector A
-    :type a: np.ndarray
-    :param b: hypervector B
-    :type b: np.ndarray
-    :return: similarity hypervector
-    :rtype: np.ndarray
-    """
-    return np.dot(a.astype(np.float32), b.astype(np.float32)) / (
-        np.linalg.norm(a.astype(np.float32)) * np.linalg.norm(b.astype(np.float32))
-    )
-    # try:
-    #     sim = np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))
-    #     return sim
-    # except:
-    #     print("@@@@@@ ERROR ERROR ERROR @@@@@@")
-    #     print(f"sim: {sim}")
-    #     print(f"a: {a}")
-    #     print(f"b: {b}")
-    #     return -100
+def CosineSimilarity(a, b):
+    """Cosine similarity: (A · B) / (‖A‖ · ‖B‖), in [-1, 1]."""
+    if TORCH_AVAILABLE and torch.is_tensor(a):
+        af = a.float()
+        bf = b.float()
+        return (torch.dot(af, bf) / (torch.linalg.norm(af) * torch.linalg.norm(bf))).item()
+    else:
+        af = a.astype(np.float32)
+        bf = b.astype(np.float32)
+        return np.dot(af, bf) / (np.linalg.norm(af) * np.linalg.norm(bf))

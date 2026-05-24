@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 
 # Optional PyTorch support
 try:
@@ -42,9 +42,55 @@ def Disjunction(*hypervectors: ArrayLike) -> ArrayLike:
     hvs, is_torch, _ = _normalize_inputs(*hypervectors)
 
     if is_torch:
-        result = hvs[0].bool()
-        for i in range(1, len(hvs)):
-            result = torch.logical_or(result, hvs[i].bool())
-        return result.to(hvs[0].dtype)
+        return torch.stack([hv.bool() for hv in hvs], dim=0).any(dim=0).to(hvs[0].dtype)
     else:
         return np.bitwise_or.reduce(hvs).astype(hvs[0].dtype)
+
+
+def DisjunctionThinned(*hypervectors: ArrayLike, density: float = 0.5) -> ArrayLike:
+    """
+    Bitwise OR bundling with random thinning to maintain density.
+
+    Bundles sparse binary hypervectors using bitwise OR, then randomly zeros
+    bits to keep the fraction of 1-bits at most `density`.
+
+    Args:
+        *hypervectors: Variable number of sparse binary hypervectors, or single 2D batch
+        density: Maximum output density (fraction of 1-bits), defaults to 0.5
+
+    Returns:
+        Bundled and thinned sparse binary hypervector
+
+    Example:
+        >>> v1 = np.array([1, 0, 1, 0])
+        >>> v2 = np.array([0, 1, 1, 0])
+        >>> result = DisjunctionThinned(v1, v2, density=0.25)
+        >>> # result has at most 1 nonzero element (25% of 4)
+    """
+    from math import ceil
+
+    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+
+    if is_torch:
+        bundled = torch.stack([hv.bool() for hv in hvs], dim=0).any(dim=0).to(hvs[0].dtype)
+
+        num_nonzero = ceil(bundled.numel() * density)
+        indices = torch.nonzero(bundled, as_tuple=True)[0]
+        if num_nonzero >= indices.numel():
+            return bundled
+        perm = torch.randperm(indices.numel())[:num_nonzero]
+        kept = indices[perm]
+        result = torch.zeros_like(bundled)
+        result[kept] = 1
+        return result
+    else:
+        bundled = np.bitwise_or.reduce(hvs).astype(hvs[0].dtype)
+
+        num_nonzero = ceil(bundled.size * density)
+        indices = np.nonzero(bundled)[0]
+        if num_nonzero >= indices.size:
+            return bundled
+        kept = np.random.choice(indices, size=num_nonzero, replace=False)
+        result = np.zeros_like(bundled)
+        result[kept] = 1
+        return result

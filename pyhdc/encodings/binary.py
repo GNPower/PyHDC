@@ -18,7 +18,7 @@ from pyhdc.components.binding import (
     SegmentShifting,
     Shifting,
 )
-from pyhdc.components.bundling import Disjunction, ElementAdditionBinaryThreshold
+from pyhdc.components.bundling import Disjunction, DisjunctionThinned, ElementAdditionBinaryThreshold
 from pyhdc.components.elements import BernoulliBinary, BernoulliSparse, SparseSegmented
 from pyhdc.components.similarity import HammingDistance, Overlap
 from pyhdc.components.thinning import NoThin
@@ -131,5 +131,44 @@ class BSDC_SEG(Encoding):
             thinning_fn=NoThin,
             binding_fn=SegmentShifting,
             unbinding_fn=InverseSegmentShifting,
+            generator_output_type="bits",
+        )
+
+
+class BSDC_THIN(Encoding):
+    """
+    Binary Sparse Distributed Code with post-bundling thinning (BSDC-THIN).
+
+    After bundling via bitwise OR, randomly zeros bits to keep the fraction
+    of 1-bits at most `density`. This controls density growth from repeated
+    bundling.
+
+    Args:
+        density: Maximum output density after bundling, defaults to 0.5
+    """
+
+    def __init__(
+        self,
+        dimension: int = 10_000,
+        backend: Backend = "numpy",
+        device: Optional[Device] = None,
+        dtype: Optional[Any] = None,
+        mask: Optional[int] = None,
+        generator: Optional[HDCGenerator] = None,
+        density: float = 0.5,
+    ) -> None:
+        self._density = density
+        super().__init__(dimension, backend, device, dtype, mask, generator)
+
+    def _get_encoding_spec(self) -> EncodingSpec:
+        bundling_fn = partial(DisjunctionThinned, density=self._density)
+        return EncodingSpec(
+            dtype=np.int8,
+            element_generator=BernoulliSparse,
+            similarity_fn=Overlap,
+            bundling_fn=bundling_fn,
+            thinning_fn=NoThin,
+            binding_fn=Shifting,
+            unbinding_fn=InverseShifting,
             generator_output_type="bits",
         )

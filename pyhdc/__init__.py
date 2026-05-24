@@ -44,11 +44,12 @@ __author__ = "GNPower"
 from pyhdc import components
 
 # Encodings from encodings module
-from pyhdc.encodings import BSDC_CDT  # Binary; Holographic; MAP; Matrix
+from pyhdc.encodings import BSDC_CDT, BSDC_THIN  # Binary; Holographic; MAP; Matrix
 from pyhdc.encodings import (
     BSC,
     BSDC_S,
     BSDC_SEG,
+    BSDC_THIN,
     FHRR,
     HRR,
     MAP_B,

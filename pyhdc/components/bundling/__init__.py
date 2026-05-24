@@ -8,7 +8,7 @@ from pyhdc.components.bundling.addition import (
     ElementAdditionCut,
 )
 from pyhdc.components.bundling.angles import AnglesOfElementAddition
-from pyhdc.components.bundling.binary import Disjunction
+from pyhdc.components.bundling.binary import Disjunction, DisjunctionThinned
 from pyhdc.components.bundling.normalized import (
     ElementAdditionConstantNormalized,
     ElementAdditionNormalized,
@@ -25,6 +25,7 @@ __all__ = [
     "ElementAdditionCut",
     "AnglesOfElementAddition",
     "Disjunction",
+    "DisjunctionThinned",
     "ElementAdditionNormalized",
     "ElementAdditionConstantNormalized",
     "ElementAdditionBinaryThreshold",
