@@ -8,7 +8,17 @@ except ImportError:
     torch = None
 
 def CosineSimilarity(a, b):
-    """Cosine similarity: (A · B) / (‖A‖ · ‖B‖), in [-1, 1]."""
+    """CosineSimilarity Cosine Similarity of two vectors
+
+    cos(theta) = ( A dot B ) / ( norm(A) * norm(B) )
+
+    Args:
+        a: hypervector A
+        b: hypervector B
+
+    Returns:
+        Similarity between hypervectors
+    """
     if TORCH_AVAILABLE and torch.is_tensor(a):
         af = a.float()
         bf = b.float()
