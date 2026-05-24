@@ -90,7 +90,7 @@ max-line-length = 88
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short --ignore=tests/benchmarks --ignore=tests/test_generation.py --ignore=tests/test_recovery.py"
+addopts = "-v --tb=short --ignore=tests/benchmarks --ignore=tests/test_recovery.py"
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
