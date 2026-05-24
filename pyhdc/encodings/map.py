@@ -141,7 +141,9 @@ class MAP_I_Bits(Encoding):
 
     def _get_encoding_spec(self) -> EncodingSpec:
         bundling_fn = partial(
-            ElementAdditionBits, min_val=-(self._mask - 1), max_val=self._mask
+            ElementAdditionBits,
+            min_val=np.iinfo(np.int32).min,
+            max_val=np.iinfo(np.int32).max,
         )
         return EncodingSpec(
             dtype=np.int32,

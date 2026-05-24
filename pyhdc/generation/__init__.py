@@ -71,55 +71,48 @@ from pyhdc.generation.xorshift import (
 # Export all generators
 __all__ = [
     # Base HDC Generator is in hypervector module
-    
     # LCG generators
-    'LCGGenerator',
-    'MultiplicativeLCGGenerator',
-    'CommonLCGGenerators',
-    
+    "LCGGenerator",
+    "MultiplicativeLCGGenerator",
+    "CommonLCGGenerators",
     # DLFSR generators
-    'DLFSRGenerator',
-    'FibonacciDLFSRGenerator',
-    'GaloisDLFSRGenerator',
-    'MatrixDLFSRGenerator',
-    'CommonDLFSRGenerators',
-    
+    "DLFSRGenerator",
+    "FibonacciDLFSRGenerator",
+    "GaloisDLFSRGenerator",
+    "MatrixDLFSRGenerator",
+    "CommonDLFSRGenerators",
     # LFSR generators
-    'LFSRGenerator',
-    'FibonacciLFSRGenerator',
-    'GaloisLFSRGenerator',
-    'CommonLFSRGenerators',
-    
+    "LFSRGenerator",
+    "FibonacciLFSRGenerator",
+    "GaloisLFSRGenerator",
+    "CommonLFSRGenerators",
     # LCA generators
-    'LCAGenerator',
-    'ElementaryLCAGenerator',
-    'TotalisticLCAGenerator',
-    'CommonLCAGenerators',
-    
+    "LCAGenerator",
+    "ElementaryLCAGenerator",
+    "TotalisticLCAGenerator",
+    "CommonLCAGenerators",
     # PCG generators
-    'PCGGenerator',
-    'MultiplicativePCGGenerator',
-    'CommonPCGGenerators',
-    
+    "PCGGenerator",
+    "MultiplicativePCGGenerator",
+    "CommonPCGGenerators",
     # Xorshift generators
-    'XorshiftGenerator',
-    'Xorshift32Generator',
-    'Xorshift64Generator',
-    'Xorshift128Generator',
-    'XorshiftPlusGenerator',
-    'XorshiftStarGenerator',
-    'Xoshiro256StarStarGenerator',
-    'Xoroshiro128PlusGenerator',
-    'Xoroshiro128StarStarGenerator',
-    'SplitMix64Generator',
-    'CommonXorshiftGenerators',
-    'splitmix64_seed',
-    
+    "XorshiftGenerator",
+    "Xorshift32Generator",
+    "Xorshift64Generator",
+    "Xorshift128Generator",
+    "XorshiftPlusGenerator",
+    "XorshiftStarGenerator",
+    "Xoshiro256StarStarGenerator",
+    "Xoroshiro128PlusGenerator",
+    "Xoroshiro128StarStarGenerator",
+    "SplitMix64Generator",
+    "CommonXorshiftGenerators",
+    "splitmix64_seed",
     # Counter-based generators
-    'ShiftedCounterGenerator',
-    'FeistelCounterGenerator',
-    'ARXCounterGenerator',
-    'SPNCounterGenerator',
-    'CustomMappingCounterGenerator',
-    'CommonCounterGenerators',
+    "ShiftedCounterGenerator",
+    "FeistelCounterGenerator",
+    "ARXCounterGenerator",
+    "SPNCounterGenerator",
+    "CustomMappingCounterGenerator",
+    "CommonCounterGenerators",
 ]

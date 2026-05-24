@@ -1,4 +1,5 @@
 """Tests for all HDCGenerator implementations."""
+
 import numpy as np
 import pytest
 
@@ -341,18 +342,21 @@ class TestShiftedCounterGenerator:
 class TestAdditionalXorshiftVariants:
     def test_xorshift128_words(self):
         from pyhdc.generation.xorshift import Xorshift128Generator
+
         gen = Xorshift128Generator(seed=42)
         words = gen.generate_words(LENGTH, 32)
         assert len(words) == LENGTH
 
     def test_xoroshiro_words(self):
         from pyhdc.generation.xorshift import Xoroshiro128PlusGenerator
+
         gen = Xoroshiro128PlusGenerator(seed=42)
         words = gen.generate_words(LENGTH, 64)
         assert len(words) == LENGTH
 
     def test_splitmix64_words(self):
         from pyhdc.generation.xorshift import SplitMix64Generator
+
         gen = SplitMix64Generator(seed=42)
         words = gen.generate_words(LENGTH, 64)
         assert len(words) == LENGTH
@@ -384,6 +388,7 @@ class TestAdditionalLCGVariants:
 class TestAdditionalPCGVariants:
     def test_multiplicative_pcg(self):
         from pyhdc.generation.pcg import MultiplicativePCGGenerator
+
         gen = MultiplicativePCGGenerator(seed=42)
         words = gen.generate_words(LENGTH, 32)
         assert len(words) == LENGTH
@@ -397,15 +402,18 @@ class TestAdditionalPCGVariants:
 class TestCustomGeneratorWithEncoding:
     def test_lcg_with_map_c(self):
         import pyhdc
+
         gen = LCGGenerator(seed=42)
         enc = pyhdc.MAP_C(dimension=512, generator=gen)
         hv = enc.generate()
         from pyhdc.hypervector import Hypervector
+
         assert isinstance(hv, Hypervector)
         assert hv.shape == (512,)
 
     def test_seed_reproducibility_via_encoding(self):
         import pyhdc
+
         gen1 = LCGGenerator(seed=7)
         gen2 = LCGGenerator(seed=7)
         enc1 = pyhdc.MAP_C(dimension=256, generator=gen1)
@@ -414,16 +422,20 @@ class TestCustomGeneratorWithEncoding:
 
     def test_lfsr_with_bsc(self):
         import pyhdc
+
         gen = FibonacciLFSRGenerator(width=16, seed=1)
         enc = pyhdc.BSC(dimension=256, generator=gen)
         hv = enc.generate()
         from pyhdc.hypervector import Hypervector
+
         assert isinstance(hv, Hypervector)
 
     def test_xorshift_with_hrr(self):
         import pyhdc
+
         gen = Xorshift32Generator(seed=42)
         enc = pyhdc.HRR(dimension=256, generator=gen)
         hv = enc.generate()
         from pyhdc.hypervector import Hypervector
+
         assert isinstance(hv, Hypervector)
