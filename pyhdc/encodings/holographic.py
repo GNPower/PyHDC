@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python
+#!/usr/bin/env python
 """
 Holographic Encodings for HDC
 
@@ -6,7 +6,7 @@ HDC-compatible wrapper for HRR and FHRR encodings.
 """
 
 from functools import partial
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 
@@ -55,10 +55,11 @@ class HRR(Encoding):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
+    similarity_remap: Optional[Callable] = None,
         random_choice_range: Optional[float] = None,
     ) -> None:
         self._random_choice_range = random_choice_range
-        super().__init__(dimension, backend, device, dtype, mask, generator)
+        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
 
     def _get_encoding_spec(self) -> EncodingSpec:
         if self._random_choice_range is not None:
@@ -131,10 +132,11 @@ class FHRR(Encoding):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
+    similarity_remap: Optional[Callable] = None,
         random_choice_range: Optional[float] = None,
     ) -> None:
         self._random_choice_range = random_choice_range
-        super().__init__(dimension, backend, device, dtype, mask, generator)
+        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
 
     def _get_encoding_spec(self) -> EncodingSpec:
         if self._random_choice_range is not None:

@@ -68,6 +68,7 @@ class Encoding(ABC):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
+        similarity_remap: Optional[Callable] = None,
     ) -> None:
         """
         Initialize an encoding scheme.
@@ -79,10 +80,15 @@ class Encoding(ABC):
             dtype: Data type override
             mask: Optional mask value
             generator: Optional custom generator (uses default if None)
+            similarity_remap: Optional callable applied to every similarity result
+                before returning. All similarity functions return [-1, 1] by default;
+                use this to remap the output, e.g. ``pyhdc.components.similarity.remap_to_unit``
+                to shift to [0, 1].
         """
         self.dimension = dimension
         self.backend = backend
         self.device = device if backend == "torch" else None
+        self._similarity_remap = similarity_remap
 
         if backend == "torch" and not TORCH_AVAILABLE:
             raise ImportError(
@@ -326,13 +332,18 @@ class Encoding(ABC):
                 data_a = _extract_data(a)
                 data_b = _extract_data(b)
                 sim = self._spec.similarity_fn(data_a, data_b)
+                if self._similarity_remap is not None:
+                    sim = self._similarity_remap(sim)
                 results.append(sim)
             return results
         else:
             # Single operation
             data_a = _extract_data(hvA)
             data_b = _extract_data(hvB)
-            return self._spec.similarity_fn(data_a, data_b)
+            result = self._spec.similarity_fn(data_a, data_b)
+            if self._similarity_remap is not None:
+                result = self._similarity_remap(result)
+            return result
 
     def bundle(
         self,
