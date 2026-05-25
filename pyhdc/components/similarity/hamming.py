@@ -7,21 +7,55 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-def HammingDistance(a, b):
+from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.types import ArrayLike
+
+
+def HammingDistance(*hypervectors: ArrayLike):
     """HammingDistance Hamming Distance of two vectors
 
     Counts the number of elements in the hypervectors where A[i] != B[i].
     Result is normalized to the size of the hypervector so it is always in
     the range [0,1].
 
+    Supports three calling conventions:
+        (a, b) where a and b are 1D: returns a scalar in [0, 1]
+        (a, b) where a and b are 2D: returns a 1D array of per-row scalars
+        (arr,) where arr is 2D:      returns a 1D array of sim(row_0, row_i)
+                                     for i in 1..N-1
+
     Args:
-        a: hypervector A
-        b: hypervector B
+        *hypervectors: Two 1D/2D hypervectors, or a single 2D array of hypervectors
 
     Returns:
-        Similarity between hypervectors
+        Scalar similarity, or 1D array of similarities
     """
-    if TORCH_AVAILABLE and torch.is_tensor(a):
-        return 1 - ((a != b).sum().item() / a.numel())
+    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+
+    if len(hvs) == 2:
+        a, b = hvs[0], hvs[1]
+        if is_torch:
+            assert torch is not None
+            a_t, b_t = torch.as_tensor(a), torch.as_tensor(b)
+            if a_t.ndim == 2:
+                mismatches = (a_t != b_t).int().sum(dim=1).float()
+                return 1 - mismatches / a_t.shape[1]
+            return 1 - int((a_t != b_t).sum()) / a_t.numel()
+        else:
+            a_n, b_n = np.asarray(a), np.asarray(b)
+            if a_n.ndim == 2:
+                mismatches = np.not_equal(a_n, b_n).sum(axis=1)
+                return 1 - mismatches / a_n.shape[1]
+            return 1 - np.count_nonzero(np.not_equal(a_n, b_n)) / a_n.size
     else:
-        return 1 - (np.count_nonzero(a != b) / a.size)
+        arr = hvs[0]
+        ref, rest = arr[0], arr[1:]
+        if is_torch:
+            assert torch is not None
+            rest_t, ref_t = torch.as_tensor(rest), torch.as_tensor(ref)
+            mismatches = (rest_t != ref_t).int().sum(dim=1).float()
+            return 1 - mismatches / ref_t.numel()
+        else:
+            rest_n, ref_n = np.asarray(rest), np.asarray(ref)
+            mismatches = np.not_equal(rest_n, ref_n).sum(axis=1)
+            return 1 - mismatches / ref_n.size
