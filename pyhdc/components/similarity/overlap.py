@@ -2,6 +2,7 @@ import numpy as np
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -43,7 +44,10 @@ def Overlap(*hypervectors: ArrayLike):
             a_t, b_t = torch.as_tensor(a), torch.as_tensor(b)
             mask = torch.logical_and(a_t == b_t, a_t == 1)
             if a_t.ndim == 2:
-                return 2 * mask.sum(dim=1).float() / b_t.sum(dim=1).float().clamp(min=1) - 1
+                return (
+                    2 * mask.sum(dim=1).float() / b_t.sum(dim=1).float().clamp(min=1)
+                    - 1
+                )
             return 2 * mask.sum().item() / max(b_t.sum().item(), 1) - 1
         else:
             a_n, b_n = np.asarray(a), np.asarray(b)

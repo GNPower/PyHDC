@@ -72,7 +72,9 @@ def DisjunctionThinned(*hypervectors: ArrayLike, density: float = 0.5) -> ArrayL
     hvs, is_torch, _ = _normalize_inputs(*hypervectors)
 
     if is_torch:
-        bundled = torch.stack([hv.bool() for hv in hvs], dim=0).any(dim=0).to(hvs[0].dtype)
+        bundled = (
+            torch.stack([hv.bool() for hv in hvs], dim=0).any(dim=0).to(hvs[0].dtype)
+        )
 
         num_nonzero = ceil(bundled.numel() * density)
         indices = torch.nonzero(bundled, as_tuple=True)[0]

@@ -18,7 +18,11 @@ from pyhdc.components.binding import (
     SegmentShifting,
     Shifting,
 )
-from pyhdc.components.bundling import Disjunction, DisjunctionThinned, ElementAdditionBinaryThreshold
+from pyhdc.components.bundling import (
+    Disjunction,
+    DisjunctionThinned,
+    ElementAdditionBinaryThreshold,
+)
 from pyhdc.components.elements import BernoulliBinary, BernoulliSparse, SparseSegmented
 from pyhdc.components.similarity import HammingDistance, Overlap
 from pyhdc.components.thinning import NoThin
@@ -48,11 +52,13 @@ class BSC(Encoding):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
-    similarity_remap: Optional[Callable] = None,
+        similarity_remap: Optional[Callable] = None,
         random_choice_range: Optional[float] = None,
     ) -> None:
         self._random_choice_range = random_choice_range
-        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
+        super().__init__(
+            dimension, backend, device, dtype, mask, generator, similarity_remap
+        )
 
     def _get_encoding_spec(self) -> EncodingSpec:
         # Use functools.partial to bake in random_choice_range parameter
@@ -156,11 +162,13 @@ class BSDC_THIN(Encoding):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
-    similarity_remap: Optional[Callable] = None,
+        similarity_remap: Optional[Callable] = None,
         density: float = 0.5,
     ) -> None:
         self._density = density
-        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
+        super().__init__(
+            dimension, backend, device, dtype, mask, generator, similarity_remap
+        )
 
     def _get_encoding_spec(self) -> EncodingSpec:
         bundling_fn = partial(DisjunctionThinned, density=self._density)

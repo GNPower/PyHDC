@@ -2,6 +2,7 @@ import numpy as np
 
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -39,7 +40,9 @@ def CosineSimilarity(*hypervectors: ArrayLike):
                 dots = (a_t * b_t).sum(dim=1)
                 norms = torch.linalg.norm(a_t, dim=1) * torch.linalg.norm(b_t, dim=1)
                 return dots / norms
-            return (torch.dot(a_t, b_t) / (torch.linalg.norm(a_t) * torch.linalg.norm(b_t))).item()
+            return (
+                torch.dot(a_t, b_t) / (torch.linalg.norm(a_t) * torch.linalg.norm(b_t))
+            ).item()
         else:
             a_n, b_n = np.asarray(a, dtype=np.float32), np.asarray(b, dtype=np.float32)
             if a_n.ndim == 2:

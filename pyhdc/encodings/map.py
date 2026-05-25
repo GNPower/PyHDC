@@ -51,11 +51,13 @@ class MAP_C(Encoding):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
-    similarity_remap: Optional[Callable] = None,
+        similarity_remap: Optional[Callable] = None,
         random_choice_range: Optional[float] = None,
     ) -> None:
         self._random_choice_range = random_choice_range
-        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
+        super().__init__(
+            dimension, backend, device, dtype, mask, generator, similarity_remap
+        )
 
     def _get_encoding_spec(self) -> EncodingSpec:
         if self._random_choice_range is not None:
@@ -97,11 +99,13 @@ class MAP_I(Encoding):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
-    similarity_remap: Optional[Callable] = None,
+        similarity_remap: Optional[Callable] = None,
         random_choice_range: Optional[float] = None,
     ) -> None:
         self._random_choice_range = random_choice_range
-        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
+        super().__init__(
+            dimension, backend, device, dtype, mask, generator, similarity_remap
+        )
 
     def _get_encoding_spec(self) -> EncodingSpec:
         if self._random_choice_range is not None:
@@ -137,10 +141,12 @@ class MAP_I_Bits(Encoding):
         dtype: Optional[Any] = None,
         mask: int = (2**32) - 1,
         generator: Optional[HDCGenerator] = None,
-    similarity_remap: Optional[Callable] = None,
+        similarity_remap: Optional[Callable] = None,
     ) -> None:
         self._mask = mask
-        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
+        super().__init__(
+            dimension, backend, device, dtype, mask, generator, similarity_remap
+        )
 
     def _get_encoding_spec(self) -> EncodingSpec:
         bundling_fn = partial(
@@ -181,11 +187,13 @@ class MAP_B(Encoding):
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
-    similarity_remap: Optional[Callable] = None,
+        similarity_remap: Optional[Callable] = None,
         random_choice_range: Optional[float] = None,
     ) -> None:
         self._random_choice_range = random_choice_range
-        super().__init__(dimension, backend, device, dtype, mask, generator, similarity_remap)
+        super().__init__(
+            dimension, backend, device, dtype, mask, generator, similarity_remap
+        )
 
     def _get_encoding_spec(self) -> EncodingSpec:
         if self._random_choice_range is not None:
