@@ -20,6 +20,7 @@ Available encodings:
 - BSDC-CDT: Binary Sparse Distributed Coding with Count Distribution for Sparse Binary Hypervectors
 - BSDC-S: Binary Sparse Distributed Coding with Sparse Distribution for Sparse Binary Hypervectors
 - BSDC-SEG: Binary Sparse Distributed Coding with Sparse Segmented Distribution for Sparse Binary Hypervectors
+- BSDC-THIN: BSDC with post-bundling random thinning to maintain density constraint
 - FHRR: Fourier Holographic Reduced Representations for Complex Hypervectors
 """
 
@@ -33,7 +34,7 @@ except ImportError:
     torch = None
 
 
-from pyhdc.encodings.binary import BSC, BSDC_CDT, BSDC_S, BSDC_SEG
+from pyhdc.encodings.binary import BSC, BSDC_CDT, BSDC_S, BSDC_SEG, BSDC_THIN
 from pyhdc.encodings.holographic import FHRR, HRR, HRR_ConstNorm, HRR_NoNorm
 from pyhdc.encodings.map import MAP_B, MAP_C, MAP_I, MAP_I_Bits
 from pyhdc.encodings.matrix import MBAT, VTB
@@ -45,6 +46,7 @@ __all__ = [
     "BSDC_CDT",
     "BSDC_S",
     "BSDC_SEG",
+    "BSDC_THIN",
     # Holographic
     "HRR",
     "HRR_NoNorm",

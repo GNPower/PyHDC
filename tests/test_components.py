@@ -51,24 +51,24 @@ class TestHammingDistance:
         sim = float(HammingDistance(v, v))
         assert abs(sim - 1.0) < 1e-10
 
-    def test_complementary_vectors_is_zero(self):
+    def test_complementary_vectors_is_minus_one(self):
         v = np.zeros(DIM, dtype=np.int32)
         v_comp = np.ones(DIM, dtype=np.int32)
         sim = float(HammingDistance(v, v_comp))
-        assert abs(sim) < 1e-10
+        assert abs(sim - (-1.0)) < 1e-10
 
-    def test_range_is_zero_to_one(self):
+    def test_range_is_minus_one_to_one(self):
         v1 = np.random.randint(0, 2, DIM, dtype=np.int32)
         v2 = np.random.randint(0, 2, DIM, dtype=np.int32)
         sim = float(HammingDistance(v1, v2))
-        assert 0.0 <= sim <= 1.0
+        assert -1.0 <= sim <= 1.0
 
-    def test_approximately_half_for_random_pair(self):
+    def test_approximately_zero_for_random_pair(self):
         np.random.seed(42)
         v1 = np.random.randint(0, 2, 10000, dtype=np.int32)
         v2 = np.random.randint(0, 2, 10000, dtype=np.int32)
         sim = float(HammingDistance(v1, v2))
-        assert 0.4 < sim < 0.6
+        assert -0.2 < sim < 0.2
 
 
 class TestElementAddition:

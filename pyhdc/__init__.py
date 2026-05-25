@@ -37,18 +37,19 @@ Advanced Usage:
 """
 
 # Version information
-__version__ = "1.0.1"
+__version__ = "1.1.0"
 __author__ = "GNPower"
 
 # Submodules are available for direct import
 from pyhdc import components
 
 # Encodings from encodings module
-from pyhdc.encodings import BSDC_CDT  # Binary; Holographic; MAP; Matrix
-from pyhdc.encodings import (
+from pyhdc.encodings import (  # Binary; Holographic; MAP; Matrix
     BSC,
+    BSDC_CDT,
     BSDC_S,
     BSDC_SEG,
+    BSDC_THIN,
     FHRR,
     HRR,
     MAP_B,
