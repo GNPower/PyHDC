@@ -12,7 +12,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_bundling
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -50,15 +50,15 @@ def ElementAdditionNormalized(
     Note:
         Result will have ||result|| = 1
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
-    num_vectors = len(hvs)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    num_vectors = batch.shape[1]
 
     if random_choice_range is None:
         random_choice_range = 0.0
 
     if is_torch:
         assert torch is not None
-        total = torch.sum(torch.stack(hvs), dim=0)
+        total = batch.sum(dim=1)
         D = total.shape[0]
         # sigma_N for N(0,1/D) elements: Var[T_k] = N/D, so sigma_N = sqrt(N/D)
         threshold = random_choice_range * sqrt(num_vectors / D)
@@ -70,7 +70,7 @@ def ElementAdditionNormalized(
         norm = torch.norm(total_modified)
         return total_modified / norm, {"random_zone_count": random_zone_count}
     else:
-        total = np.add.reduce(hvs)
+        total = batch.sum(axis=1)
         D = len(total)
         # sigma_N for N(0,1/D) elements: Var[T_k] = N/D, so sigma_N = sqrt(N/D)
         threshold = random_choice_range * sqrt(num_vectors / D)
@@ -100,13 +100,13 @@ def ElementAdditionConstantNormalized(*hypervectors: ArrayLike) -> ArrayLike:
     Note:
         Result will have ||result|| â‰ˆ 1 (approximate)
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
-    M = len(hvs)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    M = batch.shape[1]
     norm_factor = sqrt(M)
 
     if is_torch:
-        total = torch.sum(torch.stack(hvs), dim=0)
+        total = batch.sum(dim=1)
         return total / norm_factor
     else:
-        total = np.add.reduce(hvs)
+        total = batch.sum(axis=1)
         return total / norm_factor

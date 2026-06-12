@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-12
+
+### Added
+
+- Batched hypervectors with a dimension-first `(D, N)` layout (each column is a
+  hypervector). `enc.generate(size=(D, N))` returns a single `(D, N)` Hypervector;
+  `bundle` collapses a `(D, N)` batch to one `(D,)` prototype; `bind`/`unbind` of
+  two equal-shaped batches operate per column (element-wise binding only — MAP
+  multiply, BSC xor); `similarity` accepts batches (see below).
+- `Hypervector.select(indices)`: select hypervectors along the batch axis (axis 1)
+  for numpy and torch (numpy/list indices are moved to a `long` tensor on the
+  tensor's device).
+- `pyhdc.stack(hypervectors)`: backend-agnostic combine of hypervectors/batches
+  along the batch axis (a 1D `(D,)` vector is treated as `(D, 1)`), so a prototype
+  and a `(D, N)` codebook combine into `(D, N + 1)`.
+- Global default backend/device: `pyhdc.prefer_torch()`, `pyhdc.prefer_cuda()`,
+  `pyhdc.prefer_numpy()`, `pyhdc.prefer_cpu()`, `pyhdc.get_default_backend()`,
+  `pyhdc.get_default_device()`. Encodings created without an explicit
+  `backend`/`device` inherit these defaults.
+- Single-argument and broadcast similarity: `Encoding.similarity(batch)` returns
+  the similarity of column 0 against each remaining column; two equal-shaped
+  `(D, N)` batches give `N` per-column scores; a vector against a `(D, N)` batch
+  broadcasts to `N` scores.
+- Per-operation input normalizers (`_normalize_bundling`, `_normalize_binding`,
+  `_normalize_similarity`, `_normalize_thinning`) so every HDC operation receives
+  an identically-shaped input.
+
+### Changed
+
+- **Breaking**: batched 2D similarity is now dimension-first `(D, N)` (compare
+  along axis 0) instead of the batch-first `(N, D)` introduced in 1.1.0.
+  `CosineSimilarity(batch)` now returns `sim(col_0, col_i)`; pass `(D, N)`-shaped
+  arrays where you previously passed `(N, D)`. Single-vector `(D,)` similarity is
+  unchanged.
+- Encoding `backend`/`device` now default to `None` and resolve from the global
+  preference; an explicit `backend`/`device` argument still overrides it.
+
+### Fixed
+
+- Bundling a single 2D `(D, N)` batch now reduces across the batch axis to one
+  `(D,)` hypervector (previously returned unchanged, with band/normalization
+  thresholds using `N = 1`). Affects every bundling function.
+- `generate(size=(D, N))` now produces vectors in sequence as columns, so under a
+  fixed seed it matches `N` successive `generate(size=D)` calls, and works for the
+  `NormalReal` (HRR/VTB/MBAT) and sparse generators (previously raised on a tuple
+  `size`).
+
 ## [1.1.0] - 2026-05-24
 
 ### Added
@@ -103,7 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyproject.toml` with setuptools build configuration
 - GitHub Actions CI: lint, test, PyPI publish workflows
 
-[Unreleased]: https://github.com/GNPower/PyHDC/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/GNPower/PyHDC/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/GNPower/PyHDC/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/GNPower/PyHDC/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/GNPower/PyHDC/compare/v0.0.1...v1.0.0

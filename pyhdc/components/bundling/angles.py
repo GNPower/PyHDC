@@ -11,7 +11,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_bundling
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -50,8 +50,8 @@ def AnglesOfElementAddition(
     Note:
         Input values should be angles in radians. Output is also in radians.
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
-    num_vectors = len(hvs)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    num_vectors = batch.shape[1]
 
     if random_choice_range is None:
         random_choice_range = 0.0
@@ -61,9 +61,8 @@ def AnglesOfElementAddition(
 
     if is_torch:
         assert torch is not None
-        stacked = torch.stack(hvs)
-        real = torch.cos(stacked).sum(dim=0)
-        imag = torch.sin(stacked).sum(dim=0)
+        real = torch.cos(batch).sum(dim=1)
+        imag = torch.sin(batch).sum(dim=1)
         magnitude = torch.sqrt(real**2 + imag**2)
         in_band = magnitude <= threshold
         random_zone_count = int(in_band.sum().item())
@@ -71,8 +70,8 @@ def AnglesOfElementAddition(
         result = torch.where(in_band, random_angles, torch.atan2(imag, real))
         return result, {"random_zone_count": random_zone_count}
     else:
-        real = np.cos(hvs).sum(axis=0)
-        imag = np.sin(hvs).sum(axis=0)
+        real = np.cos(batch).sum(axis=1)
+        imag = np.sin(batch).sum(axis=1)
         magnitude = np.sqrt(real**2 + imag**2)
         in_band = magnitude <= threshold
         random_zone_count = int(in_band.sum())

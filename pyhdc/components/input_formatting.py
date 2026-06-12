@@ -82,6 +82,143 @@ def _normalize_inputs(
     return data_arrays, is_torch, reference_hv
 
 
+def _as_2d_columns(array: ArrayLike, is_torch: bool) -> ArrayLike:
+    """
+    Reshape a hypervector array so its columns are individual hypervectors.
+
+    A 1D ``(D,)`` vector becomes ``(D, 1)``; a higher-rank ``(D, *batch)`` array is
+    flattened to ``(D, prod(batch))``. A 2D ``(D, N)`` array is returned unchanged.
+    """
+    ndim = getattr(array, "ndim", 1)
+    if ndim == 1:
+        return array[:, None]
+    if ndim > 2:
+        return array.reshape(array.shape[0], -1)
+    return array
+
+
+def _normalize_bundling(
+    *arrays: Union[ArrayLike, "Hypervector"]
+) -> Tuple[ArrayLike, bool, Optional["Hypervector"]]:
+    """
+    Normalize bundling inputs to a single ``(D, N)`` array of column hypervectors.
+
+    Every supported call shape collapses to one dimension-first 2D array whose
+    columns are the hypervectors to bundle, so each bundling function only has to
+    reduce over axis 1:
+
+    - ``bundle(a, b, c)`` with ``(D,)`` vectors      -> ``(D, 3)``
+    - ``bundle(batch)`` with a ``(D, N)`` batch      -> ``(D, N)``
+    - ``bundle(a, batch)`` mixing the two            -> concatenated ``(D, 1 + N)``
+
+    Args:
+        *arrays: Hypervectors or raw arrays to bundle together.
+
+    Returns:
+        Tuple of ``(batch, is_torch, reference_hypervector)`` where ``batch`` is a
+        single ``(D, N)`` array.
+    """
+    data_arrays, is_torch, reference_hv = _normalize_inputs(*arrays)
+    columns = [_as_2d_columns(arr, is_torch) for arr in data_arrays]
+
+    if len(columns) == 1:
+        batch = columns[0]
+    elif is_torch:
+        batch = torch.cat(columns, dim=1)
+    else:
+        batch = np.concatenate(columns, axis=1)
+
+    return batch, is_torch, reference_hv
+
+
+def _normalize_binding(
+    *arrays: Union[ArrayLike, "Hypervector"]
+) -> Tuple[List[ArrayLike], bool, Optional["Hypervector"]]:
+    """
+    Normalize binding inputs to a list of operands for element-wise reduction.
+
+    Binding combines K operands position-by-position, so each operand keeps its
+    own shape (``(D,)`` or ``(D, N)``); two equal-shaped ``(D, N)`` batches bind
+    per column (column i of operand 1 with column i of operand 2).
+
+    Args:
+        *arrays: Hypervectors or raw arrays to bind.
+
+    Returns:
+        Tuple of ``(operands, is_torch, reference_hypervector)``.
+    """
+    return _normalize_inputs(*arrays)
+
+
+def _normalize_similarity(
+    *arrays: Union[ArrayLike, "Hypervector"]
+) -> Tuple[ArrayLike, ArrayLike, bool, bool]:
+    """
+    Normalize similarity inputs to an aligned ``(A, B)`` pair compared column-wise.
+
+    Resolves every calling convention to two dimension-first arrays whose columns
+    are compared over axis 0 (broadcasting on axis 1):
+
+    - one ``(D, N)`` batch         -> ``A = col 0``, ``B = cols 1..N-1`` (N-1 scores)
+    - two ``(D,)`` vectors         -> one scalar score (``scalar=True``)
+    - two ``(D, N)`` batches       -> N per-column scores
+    - ``(D,)`` and ``(D, N)``      -> the vector broadcast against each column (N scores)
+
+    Args:
+        *arrays: One or two hypervectors / raw arrays.
+
+    Returns:
+        Tuple of ``(A, B, is_torch, scalar)``. ``A``/``B`` are dimension-first
+        arrays broadcastable on axis 1; ``scalar`` is True when both inputs were a
+        single 1D vector (the result should be returned as a Python float).
+    """
+    data_arrays, is_torch, _ = _normalize_inputs(*arrays)
+
+    if len(data_arrays) == 1:
+        arr = data_arrays[0]
+        if getattr(arr, "ndim", 1) < 2:
+            raise ValueError(
+                "single-input similarity requires a 2D (D, N) batch of hypervectors"
+            )
+        return arr[:, :1], arr[:, 1:], is_torch, False
+
+    if len(data_arrays) == 2:
+        a, b = data_arrays[0], data_arrays[1]
+        a_1d = getattr(a, "ndim", 1) == 1
+        b_1d = getattr(b, "ndim", 1) == 1
+        scalar = a_1d and b_1d
+        if a_1d:
+            a = a[:, None]
+        if b_1d:
+            b = b[:, None]
+        return a, b, is_torch, scalar
+
+    raise ValueError(
+        f"similarity expects one or two hypervector inputs, got {len(data_arrays)}"
+    )
+
+
+def _normalize_thinning(
+    array: Union[ArrayLike, "Hypervector"],
+) -> Tuple[ArrayLike, bool, Optional["Hypervector"]]:
+    """
+    Normalize a single thinning input to its raw array.
+
+    Thinning acts on one hypervector (``(D,)``) or, where the thinning function
+    supports it, per column of a ``(D, N)`` batch.
+
+    Args:
+        array: A hypervector or raw array.
+
+    Returns:
+        Tuple of ``(data, is_torch, reference_hypervector)``.
+    """
+    data = _extract_data(array)
+    is_torch = TORCH_AVAILABLE and torch.is_tensor(data)
+    reference_hv = array if _is_hypervector(array) else None
+    return data, is_torch, reference_hv
+
+
 def _detect_batch_structure(
     *arrays: Union[ArrayLike, "Hypervector", List], batch_dim: Optional[int] = None
 ) -> Tuple[bool, Union[List, List[List]]]:

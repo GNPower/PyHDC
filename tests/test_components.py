@@ -49,19 +49,19 @@ class TestCosineSimilarity:
         assert np.isscalar(sim) or sim.ndim == 0
 
     def test_2d_batch_returns_array(self):
-        a = np.random.randn(4, DIM).astype(np.float32)
-        b = np.random.randn(4, DIM).astype(np.float32)
+        a = np.random.randn(DIM, 4).astype(np.float32)
+        b = np.random.randn(DIM, 4).astype(np.float32)
         sims = CosineSimilarity(a, b)
         assert sims.shape == (4,)
         assert np.all(sims >= -1.0) and np.all(sims <= 1.0)
 
     def test_2d_batch_identical_rows_is_one(self):
-        a = np.random.randn(4, DIM).astype(np.float32)
+        a = np.random.randn(DIM, 4).astype(np.float32)
         sims = CosineSimilarity(a, a)
         np.testing.assert_allclose(sims, np.ones(4), atol=1e-5)
 
     def test_single_2d_array_batched(self):
-        rows = np.random.randn(5, DIM).astype(np.float32)
+        rows = np.random.randn(DIM, 5).astype(np.float32)
         sims = CosineSimilarity(rows)
         assert sims.shape == (4,)  # sim(row_0, row_i) for i in 1..4
         assert np.all(sims >= -1.0) and np.all(sims <= 1.0)
@@ -93,19 +93,19 @@ class TestHammingDistance:
         assert -0.2 < sim < 0.2
 
     def test_2d_batch_returns_array(self):
-        a = np.random.randint(0, 2, (4, DIM), dtype=np.int32)
-        b = np.random.randint(0, 2, (4, DIM), dtype=np.int32)
+        a = np.random.randint(0, 2, (DIM, 4), dtype=np.int32)
+        b = np.random.randint(0, 2, (DIM, 4), dtype=np.int32)
         sims = HammingDistance(a, b)
         assert sims.shape == (4,)
         assert np.all(sims >= -1.0) and np.all(sims <= 1.0)
 
     def test_2d_batch_identical_rows_is_one(self):
-        a = np.random.randint(0, 2, (4, DIM), dtype=np.int32)
+        a = np.random.randint(0, 2, (DIM, 4), dtype=np.int32)
         sims = HammingDistance(a, a)
         np.testing.assert_allclose(sims, np.ones(4), atol=1e-10)
 
     def test_single_2d_array_batched(self):
-        rows = np.random.randint(0, 2, (5, DIM), dtype=np.int32)
+        rows = np.random.randint(0, 2, (DIM, 5), dtype=np.int32)
         sims = HammingDistance(rows)
         assert sims.shape == (4,)
         assert np.all(sims >= -1.0) and np.all(sims <= 1.0)
@@ -242,13 +242,13 @@ class TestOverlap:
         assert -1.0 <= sim <= 1.0
 
     def test_2d_batch_returns_array(self):
-        a = np.random.randint(0, 2, (4, DIM), dtype=np.int32)
-        b = np.random.randint(0, 2, (4, DIM), dtype=np.int32)
+        a = np.random.randint(0, 2, (DIM, 4), dtype=np.int32)
+        b = np.random.randint(0, 2, (DIM, 4), dtype=np.int32)
         sims = Overlap(a, b)
         assert sims.shape == (4,)
 
     def test_single_2d_array_batched(self):
-        rows = np.random.randint(0, 2, (5, DIM), dtype=np.int32)
+        rows = np.random.randint(0, 2, (DIM, 5), dtype=np.int32)
         sims = Overlap(rows)
         assert sims.shape == (4,)
 
@@ -266,13 +266,13 @@ class TestAngleDistance:
         assert -1.0 <= sim <= 1.0
 
     def test_2d_batch_returns_array(self):
-        a = np.random.uniform(0, 2 * np.pi, (4, DIM)).astype(np.float32)
-        b = np.random.uniform(0, 2 * np.pi, (4, DIM)).astype(np.float32)
+        a = np.random.uniform(0, 2 * np.pi, (DIM, 4)).astype(np.float32)
+        b = np.random.uniform(0, 2 * np.pi, (DIM, 4)).astype(np.float32)
         sims = AngleDistance(a, b)
         assert sims.shape == (4,)
 
     def test_single_2d_array_batched(self):
-        rows = np.random.uniform(0, 2 * np.pi, (5, DIM)).astype(np.float32)
+        rows = np.random.uniform(0, 2 * np.pi, (DIM, 5)).astype(np.float32)
         sims = AngleDistance(rows)
         assert sims.shape == (4,)
 
@@ -355,6 +355,41 @@ class TestNoThin:
         assert result is v
 
 
+class TestBatchedReduction:
+    def test_element_addition_batch_collapses(self):
+        # (D=3, N=2): columns are the vectors to bundle
+        batch = np.array([[1.0, 2.0], [3.0, 4.0], [-5.0, -6.0]], dtype=np.float32)
+        result, _ = ElementAddition(batch)
+        np.testing.assert_array_almost_equal(result, batch.sum(axis=1))
+
+    def test_element_addition_batch_matches_args(self):
+        batch = np.array([[1.0, 2.0], [3.0, 4.0], [-5.0, -6.0]], dtype=np.float32)
+        from_batch, _ = ElementAddition(batch)
+        from_args, _ = ElementAddition(batch[:, 0], batch[:, 1])
+        np.testing.assert_array_almost_equal(from_batch, from_args)
+
+    def test_disjunction_batch_collapses(self):
+        batch = np.array([[1, 0], [0, 1], [1, 1], [0, 0]], dtype=np.int32)
+        result = Disjunction(batch)
+        np.testing.assert_array_equal(result, [1, 1, 1, 0])
+
+
+class TestSimilarityModes:
+    def test_two_singles_returns_float(self):
+        v = np.random.randn(DIM).astype(np.float32)
+        sim = CosineSimilarity(v, v)
+        assert isinstance(sim, float)
+        assert abs(sim - 1.0) < 1e-5
+
+    def test_vector_vs_batch_broadcast(self):
+        v = np.random.randn(DIM).astype(np.float32)
+        b = np.random.randn(DIM, 4).astype(np.float32)
+        b[:, 0] = v
+        sims = CosineSimilarity(v, b)
+        assert sims.shape == (4,)
+        assert abs(sims[0] - 1.0) < 1e-5
+
+
 torch = pytest.importorskip("torch", reason="PyTorch not installed")
 
 
@@ -367,14 +402,14 @@ class TestSimilarityTorch:
         assert abs(float(sim) - 1.0) < 1e-4
 
     def test_cosine_2d_torch(self):
-        a = torch.randn(4, DIM)
-        b = torch.randn(4, DIM)
+        a = torch.randn(DIM, 4)
+        b = torch.randn(DIM, 4)
         sims = CosineSimilarity(a, b)
         assert sims.shape == (4,)
         assert (sims >= -1.0).all() and (sims <= 1.0).all()
 
     def test_cosine_single_2d_torch(self):
-        rows = torch.randn(5, DIM)
+        rows = torch.randn(DIM, 5)
         sims = CosineSimilarity(rows)
         assert sims.shape == (4,)
 
@@ -384,13 +419,13 @@ class TestSimilarityTorch:
         assert abs(float(sim) - 1.0) < 1e-6
 
     def test_hamming_2d_torch(self):
-        a = torch.randint(0, 2, (4, DIM))
-        b = torch.randint(0, 2, (4, DIM))
+        a = torch.randint(0, 2, (DIM, 4))
+        b = torch.randint(0, 2, (DIM, 4))
         sims = HammingDistance(a, b)
         assert sims.shape == (4,)
 
     def test_hamming_single_2d_torch(self):
-        rows = torch.randint(0, 2, (5, DIM))
+        rows = torch.randint(0, 2, (DIM, 5))
         sims = HammingDistance(rows)
         assert sims.shape == (4,)
 
@@ -401,13 +436,13 @@ class TestSimilarityTorch:
         assert abs(float(sim) - 1.0) < 1e-6
 
     def test_overlap_2d_torch(self):
-        a = torch.randint(0, 2, (4, DIM))
-        b = torch.randint(0, 2, (4, DIM))
+        a = torch.randint(0, 2, (DIM, 4))
+        b = torch.randint(0, 2, (DIM, 4))
         sims = Overlap(a, b)
         assert sims.shape == (4,)
 
     def test_overlap_single_2d_torch(self):
-        rows = torch.randint(0, 2, (5, DIM))
+        rows = torch.randint(0, 2, (DIM, 5))
         sims = Overlap(rows)
         assert sims.shape == (4,)
 
@@ -417,13 +452,13 @@ class TestSimilarityTorch:
         assert abs(float(sim) - 1.0) < 1e-4
 
     def test_angle_2d_torch(self):
-        a = torch.rand(4, DIM) * 2 * 3.14159
-        b = torch.rand(4, DIM) * 2 * 3.14159
+        a = torch.rand(DIM, 4) * 2 * 3.14159
+        b = torch.rand(DIM, 4) * 2 * 3.14159
         sims = AngleDistance(a, b)
         assert sims.shape == (4,)
 
     def test_angle_single_2d_torch(self):
-        rows = torch.rand(5, DIM) * 2 * 3.14159
+        rows = torch.rand(DIM, 5) * 2 * 3.14159
         sims = AngleDistance(rows)
         assert sims.shape == (4,)
 

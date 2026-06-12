@@ -43,6 +43,16 @@ __author__ = "GNPower"
 # Submodules are available for direct import
 from pyhdc import components
 
+# Global backend/device preferences
+from pyhdc.config import (
+    get_default_backend,
+    get_default_device,
+    prefer_cpu,
+    prefer_cuda,
+    prefer_numpy,
+    prefer_torch,
+)
+
 # Encodings from encodings module
 from pyhdc.encodings import (  # Binary; Holographic; MAP; Matrix
     BSC,
@@ -86,6 +96,7 @@ from pyhdc.hypervector import (  # Core classes; Backend availability; Convenien
     bind,
     bundle,
     generate,
+    stack,
     zeros,
 )
 
@@ -126,6 +137,14 @@ __all__ = [
     "zeros",
     "bundle",
     "bind",
+    "stack",
+    # Global backend/device preferences
+    "prefer_torch",
+    "prefer_cuda",
+    "prefer_numpy",
+    "prefer_cpu",
+    "get_default_backend",
+    "get_default_device",
     # Exceptions
     "HDCException",
     "DimensionsNotMatchingError",

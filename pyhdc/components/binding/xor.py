@@ -9,7 +9,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -38,7 +38,7 @@ def ExclusiveOr(*hypervectors: ArrayLike) -> ArrayLike:
         >>> result = ExclusiveOr(v1, v2)
         >>> # result: [0, 1, 1, 0]
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     if is_torch:
         result = hvs[0].bool()
