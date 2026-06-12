@@ -9,7 +9,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -36,7 +36,7 @@ def CircularConvolution(*hypervectors: ArrayLike) -> ArrayLike:
         Binding is performed iteratively for more than 2 vectors:
         bind(A, B, C) = bind(bind(A, B), C)
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     if is_torch:
         # PyTorch FFT
@@ -68,7 +68,7 @@ def CircularCorrelation(*hypervectors: ArrayLike) -> ArrayLike:
     Note:
         For unbinding bind(A, B) with B, compute: correlate(bind(A, B), B) â‰ˆ A
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     if is_torch:
         # PyTorch FFT with conjugate

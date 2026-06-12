@@ -11,7 +11,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_bundling
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -50,8 +50,8 @@ def ElementAddition(
         >>> result, _ = ElementAddition(v1, v2)
         >>> # result: [2, 0, 0, -2]
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
-    num_vectors = len(hvs)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    num_vectors = batch.shape[1]
 
     if random_choice_range is None:
         random_choice_range = 0.0
@@ -60,7 +60,7 @@ def ElementAddition(
 
     if is_torch:
         assert torch is not None
-        total = torch.sum(torch.stack(hvs), dim=0)
+        total = batch.sum(dim=1)
         in_band = torch.abs(total) <= threshold
         random_zone_count = int(in_band.sum().item())
         random_vals = torch.where(
@@ -71,7 +71,7 @@ def ElementAddition(
         result = torch.where(in_band, random_vals, total)
         return result, {"random_zone_count": random_zone_count}
     else:
-        total = np.add.reduce(hvs)
+        total = batch.sum(axis=1)
         in_band = np.abs(total) <= threshold
         random_zone_count = int(in_band.sum())
         random_vals = np.where(np.random.rand(*total.shape) < 0.5, -1, 1).astype(
@@ -98,17 +98,18 @@ def ElementAdditionBits(
     Returns:
         Bundled hypervector with per-step clipping
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    num_vectors = batch.shape[1]
 
     if is_torch:
-        result = torch.zeros_like(hvs[0])
-        for hv in hvs:
-            result = result + hv
+        result = torch.zeros_like(batch[:, 0])
+        for j in range(num_vectors):
+            result = result + batch[:, j]
             result = torch.clamp(result, min_val, max_val)
     else:
-        result = np.zeros_like(hvs[0])
-        for hv in hvs:
-            result = np.add(result, hv)
+        result = np.zeros_like(batch[:, 0])
+        for j in range(num_vectors):
+            result = np.add(result, batch[:, j])
             result = np.clip(result, min_val, max_val)
 
     return result
@@ -143,8 +144,8 @@ def ElementAdditionCut(
         Tuple of (bundled and clipped hypervector, metadata dict).
         Metadata contains "random_zone_count".
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
-    num_vectors = len(hvs)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    num_vectors = batch.shape[1]
 
     if random_choice_range is None:
         random_choice_range = 0.0
@@ -154,7 +155,7 @@ def ElementAdditionCut(
 
     if is_torch:
         assert torch is not None
-        total = torch.sum(torch.stack(hvs), dim=0)
+        total = batch.sum(dim=1)
         in_band = torch.abs(total) <= threshold
         random_zone_count = int(in_band.sum().item())
         random_vals = (
@@ -163,7 +164,7 @@ def ElementAdditionCut(
         result = torch.where(in_band, random_vals, torch.clamp(total, min_val, max_val))
         return result, {"random_zone_count": random_zone_count}
     else:
-        total = np.add.reduce(hvs)
+        total = batch.sum(axis=1)
         in_band = np.abs(total) <= threshold
         random_zone_count = int(in_band.sum())
         random_vals = np.random.uniform(min_val, max_val, total.shape).astype(

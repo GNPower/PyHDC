@@ -181,6 +181,34 @@ class Hypervector:
             self._data[key], self._encoding, self._backend, self._metadata
         )
 
+    def select(self, indices) -> "Hypervector":
+        """
+        Select hypervectors along the batch axis (axis 1).
+
+        Hypervectors are dimension-first ``(D, N)``; ``select`` keeps the columns
+        at the given indices.
+
+        Args:
+            indices: Integer (non-negative) indices of the hypervectors to keep,
+                as a sequence, numpy array, or tensor.
+
+        Returns:
+            A new Hypervector of shape ``(D, len(indices))`` with the selected
+            columns, preserving encoding, backend, and metadata.
+        """
+        data = self._data
+        if self._backend == "torch":
+            idx = (
+                indices
+                if torch.is_tensor(indices)
+                else torch.as_tensor(np.asarray(indices))
+            )
+            idx = idx.to(device=data.device, dtype=torch.long)
+            selected = data.index_select(1, idx)
+        else:
+            selected = data[:, np.asarray(indices, dtype=np.intp)]
+        return Hypervector(selected, self._encoding, self._backend, self._metadata)
+
     def to_numpy(self) -> "Hypervector":
         """Convert to numpy backend."""
         if self._backend == "numpy":
@@ -218,19 +246,23 @@ class Hypervector:
         return self.to_torch(device_str)
 
     def similarity(
-        self, other: "Hypervector"
+        self, other: Optional["Hypervector"] = None
     ) -> Union[
         float, np.ndarray, "torch.Tensor"
     ]:  # pyright: ignore[reportInvalidTypeForm]
         """
-        Compute similarity with another hypervector.
+        Compute similarity with another hypervector, or within a batch.
 
         Args:
-            other: Another hypervector to compare with
+            other: Another hypervector to compare with. If omitted, ``self`` must be
+                a ``(D, N)`` batch and the similarity of column 0 against each
+                remaining column is returned.
 
         Returns:
             Similarity score(s)
         """
+        if other is None:
+            return self._encoding.similarity(self)
         self._check_compatibility(other)
         return self._encoding.similarity(self, other)
 
@@ -388,3 +420,51 @@ def bind(*hypervectors: Hypervector) -> Hypervector:
     if not hypervectors:
         raise ValueError("At least one hypervector required")
     return hypervectors[0].bind(*hypervectors[1:])
+
+
+def stack(hypervectors: "list[Hypervector]") -> Hypervector:
+    """
+    Combine hypervectors/batches into one dimension-first ``(D, N)`` Hypervector.
+
+    Backend-agnostic (numpy or torch). Concatenates along the batch axis (axis 1);
+    a 1D ``(D,)`` vector is treated as a single column ``(D, 1)``. For example,
+    ``stack([prototype, codebook])`` with a ``(D,)`` prototype and a ``(D, N)``
+    codebook returns a ``(D, N + 1)`` Hypervector with the prototype as column 0.
+
+    Args:
+        hypervectors: A non-empty list of Hypervectors sharing a backend (and,
+            ideally, an encoding).
+
+    Returns:
+        A new Hypervector with the inputs concatenated along the batch axis.
+
+    Raises:
+        ValueError: If the list is empty or the backends differ.
+    """
+    if not hypervectors:
+        raise ValueError("At least one hypervector required")
+
+    first = hypervectors[0]
+    backend = first.backend
+    encoding = first.encoding
+
+    arrays = []
+    for hv in hypervectors:
+        if hv.backend != backend:
+            raise ValueError(
+                f"Backend mismatch in stack: {backend} vs {hv.backend}. "
+                f"Use .to_numpy() or .to_torch() to convert."
+            )
+        if hv.encoding.__class__ != encoding.__class__:
+            warnings.warn(
+                f"Encoding mismatch in stack: {encoding.__class__.__name__} vs "
+                f"{hv.encoding.__class__.__name__}"
+            )
+        arrays.append(hv.data)
+
+    if backend == "torch":
+        result = torch.column_stack(arrays)
+    else:
+        result = np.column_stack(arrays)
+
+    return Hypervector(result, encoding, backend)

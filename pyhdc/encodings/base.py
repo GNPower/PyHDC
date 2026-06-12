@@ -13,6 +13,7 @@ except ImportError:
     torch = None
 
 
+from pyhdc.config import get_default_backend, get_default_device
 from pyhdc.exceptions import GeneratorNotSupportedError
 from pyhdc.generation.base import DefaultGenerator, HDCGenerator
 from pyhdc.hypervector import BackendManager, EncodingSpec, Hypervector
@@ -63,7 +64,7 @@ class Encoding(ABC):
     def __init__(
         self,
         dimension: int = 10_000,
-        backend: Backend = "numpy",
+        backend: Optional[Backend] = None,
         device: Optional[Device] = None,
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
@@ -75,8 +76,11 @@ class Encoding(ABC):
 
         Args:
             dimension: Number of dimensions in hypervectors
-            backend: Backend to use ('numpy' or 'torch')
-            device: Device for PyTorch backend
+            backend: Backend to use ('numpy' or 'torch'). Defaults to the global
+                preference (see ``pyhdc.prefer_torch``/``prefer_numpy``), which is
+                'numpy' unless changed.
+            device: Device for PyTorch backend. Defaults to the global preference
+                (see ``pyhdc.prefer_cuda``/``prefer_cpu``).
             dtype: Data type override
             mask: Optional mask value
             generator: Optional custom generator (uses default if None)
@@ -85,6 +89,11 @@ class Encoding(ABC):
                 use this to remap the output, e.g. ``pyhdc.components.similarity.remap_to_unit``
                 to shift to [0, 1].
         """
+        if backend is None:
+            backend = get_default_backend()
+        if device is None:
+            device = get_default_device()
+
         self.dimension = dimension
         self.backend = backend
         self.device = device if backend == "torch" else None
@@ -190,6 +199,21 @@ class Encoding(ABC):
         arr = np.array(data, dtype=self._spec.dtype)
         return arr.reshape(shape)
 
+    def _generate_one(self, dim: int, use_generator: bool) -> np.ndarray:
+        """
+        Generate a single ``(dim,)`` hypervector as a numpy array.
+
+        Args:
+            dim: Hypervector dimension.
+            use_generator: Whether to use the custom HDCGenerator pathway.
+
+        Returns:
+            A 1D numpy array of length ``dim``.
+        """
+        if use_generator and self._generator is not None:
+            return self._generate_with_generator(dim)
+        return self._spec.element_generator(dim, self._spec.dtype)
+
     def generate(
         self,
         size: Union[int, Tuple[int, ...]] = None,
@@ -200,43 +224,52 @@ class Encoding(ABC):
         """
         Generate random hypervector(s).
 
+        Hypervectors are dimension-first. A scalar (or ``None``) ``size`` produces a
+        single ``(D,)`` hypervector; a tuple ``(D, N)`` produces a batch of ``N``
+        hypervectors of dimension ``D`` stored as columns of a ``(D, N)`` array
+        (and likewise ``(D, N, M)`` for higher-rank batches).
+
+        Batched generation is defined as generating the ``N`` hypervectors one at a
+        time and stacking them as columns, so under a fixed seed
+        ``generate(size=(D, N))`` yields exactly the same vectors as ``N`` successive
+        ``generate(size=D)`` calls -- including for ordered generators (LCG/LFSR/...).
+
         Args:
-            size: Size specification. If int, generates (size,) shaped array.
-                  If tuple, generates that shape. If None, uses self.dimension.
-            backend: Backend override
-            device: Device override (for PyTorch)
-            use_generator: Whether to use the HDCGenerator pathway. Defaults to
-                          True if a custom generator was passed at construction,
-                          False otherwise (uses element_generator directly, which
-                          gives the correct per-encoding distribution).
+            size: ``None`` or int for a single ``(D,)`` vector; a tuple
+                ``(D, *batch)`` for a batch of ``prod(batch)`` vectors of dimension
+                ``D``.
+            backend: Backend override (defaults to the encoding's backend).
+            device: Device override for the torch backend.
+            use_generator: Whether to use the HDCGenerator pathway. Defaults to True
+                if a custom generator was passed at construction, False otherwise
+                (uses element_generator directly, which gives the correct
+                per-encoding distribution).
 
         Returns:
-            A new Hypervector
+            A new Hypervector.
         """
         if backend is None:
             backend = self.backend
         if device is None:
             device = self.device
-
         if use_generator is None:
             use_generator = self._has_custom_generator
 
-        # Determine dimensions
-        if size is None:
-            dimensions = self.dimension
-        elif isinstance(size, int):
-            dimensions = size
+        if size is None or isinstance(size, int):
+            dim = self.dimension if size is None else size
+            data = self._generate_one(dim, use_generator)
         elif isinstance(size, tuple):
-            dimensions = size
+            dim, batch = size[0], size[1:]
+            if not batch:
+                data = self._generate_one(dim, use_generator)
+            else:
+                count = 1
+                for axis in batch:
+                    count *= int(axis)
+                columns = [self._generate_one(dim, use_generator) for _ in range(count)]
+                data = np.stack(columns, axis=-1).reshape((dim, *batch))
         else:
             raise ValueError(f"Invalid size specification: {size}")
-
-        # Generate data
-        if use_generator and self._generator is not None:
-            data = self._generate_with_generator(dimensions)
-        else:
-            # Use default element generator
-            data = self._spec.element_generator(dimensions, self._spec.dtype)
 
         # Convert to appropriate backend
         if backend == "torch":
@@ -294,28 +327,32 @@ class Encoding(ABC):
     def similarity(
         self,
         hvA: Union[ArrayLike, Hypervector, List],
-        hvB: Union[ArrayLike, Hypervector, List],
+        hvB: Optional[Union[ArrayLike, Hypervector, List]] = None,
     ) -> Union[float, ArrayLike, List[Union[float, ArrayLike]]]:
         """
         Compute similarity between hypervector(s).
 
-        Supports batching: if both inputs are lists of equal length, computes
-        pairwise similarities element-by-element.
+        Hypervectors are dimension-first ``(D, N)``. Calling conventions:
+
+        - ``similarity(a, b)`` with two ``(D,)`` vectors -> a scalar score
+        - ``similarity(A, B)`` with two ``(D, N)`` batches -> ``N`` per-column scores
+        - ``similarity(v, B)`` with a vector and a ``(D, N)`` batch -> ``N`` scores
+        - ``similarity(batch)`` with one ``(D, N)`` batch -> ``N-1`` scores of
+          column 0 against each remaining column
+        - ``similarity([..], [..])`` with two equal-length lists -> pairwise scores
 
         Args:
-            hvA: First hypervector(s) (Hypervector, array, or list)
-            hvB: Second hypervector(s) (Hypervector, array, or list)
+            hvA: First hypervector(s) (Hypervector, array, or list), or a single
+                ``(D, N)`` batch when ``hvB`` is omitted.
+            hvB: Optional second hypervector(s).
 
         Returns:
-            Single similarity score (if single inputs) or List of scores (if list inputs)
+            A scalar, a 1D array of scores, or a list of scores (for list inputs).
 
         Examples:
-            >>> # Single similarity
-            >>> bsc.similarity(hv1, hv2)  # Returns: float
-
-            >>> # Batched pairwise similarity
-            >>> bsc.similarity([hv1, hv2, hv3], [hv4, hv5, hv6])
-            >>> # Returns: [sim(hv1,hv4), sim(hv2,hv5), sim(hv3,hv6)]
+            >>> bsc.similarity(hv1, hv2)                       # scalar
+            >>> enc.similarity(codebook)                       # col 0 vs the rest
+            >>> bsc.similarity([hv1, hv2], [hv4, hv5])         # [sim(1,4), sim(2,5)]
         """
         from pyhdc.components.input_formatting import _extract_data
 
@@ -336,14 +373,15 @@ class Encoding(ABC):
                     sim = self._similarity_remap(sim)
                 results.append(sim)
             return results
+
+        # Single (D, N) batch (hvB omitted) or a two-operand comparison
+        if hvB is None:
+            result = self._spec.similarity_fn(_extract_data(hvA))
         else:
-            # Single operation
-            data_a = _extract_data(hvA)
-            data_b = _extract_data(hvB)
-            result = self._spec.similarity_fn(data_a, data_b)
-            if self._similarity_remap is not None:
-                result = self._similarity_remap(result)
-            return result
+            result = self._spec.similarity_fn(_extract_data(hvA), _extract_data(hvB))
+        if self._similarity_remap is not None:
+            result = self._similarity_remap(result)
+        return result
 
     def bundle(
         self,

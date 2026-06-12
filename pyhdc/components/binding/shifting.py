@@ -12,7 +12,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -56,7 +56,7 @@ def Shifting(*hypervectors: ArrayLike) -> ArrayLike:
     Returns:
         Bound hypervector
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     hashed = _shift_get_hash(hvs[0], is_torch)
     result = hvs[0]
@@ -83,7 +83,7 @@ def InverseShifting(*hypervectors: ArrayLike) -> ArrayLike:
     Returns:
         Unbound hypervector
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     hashed = _shift_get_hash(hvs[0], is_torch)
     result = hvs[0]
@@ -117,7 +117,7 @@ def _segment_shifting_directional(
     Returns:
         Shifted hypervector
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
     dimensions = hvs[0].shape[0]
 
     if probability is None:
