@@ -11,7 +11,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_bundling
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -55,8 +55,8 @@ def ElementAdditionBinaryThreshold(
         >>> result, metadata = ElementAdditionBinaryThreshold(v1, v2, v3)
         >>> # result: [1, 0, 0, 0] (1 appears in 3/3, 2/3, 1/3, 1/3 positions)
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
-    num_vectors = len(hvs)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    num_vectors = batch.shape[1]
     threshold = num_vectors / 2.0
 
     # Default random_choice_range to 0.0 to handle ties at threshold
@@ -73,7 +73,7 @@ def ElementAdditionBinaryThreshold(
 
     if is_torch:
         assert torch is not None  # Type narrowing for type checkers
-        total = torch.sum(torch.stack(hvs), dim=0)
+        total = batch.sum(dim=1)
 
         # Track elements in random zone
         in_random_zone = torch.where(
@@ -99,7 +99,7 @@ def ElementAdditionBinaryThreshold(
         }
         return result, metadata
     else:
-        total = np.add.reduce(hvs)
+        total = batch.sum(axis=1)
 
         # Track elements in random zone
         in_random_zone = np.where(
@@ -154,8 +154,8 @@ def ElementAdditionBipolarThreshold(
         Tuple of (bundled bipolar hypervector, metadata dict).
         Metadata contains "random_zone_count".
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
-    num_vectors = len(hvs)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
+    num_vectors = batch.shape[1]
 
     if random_choice_range is None:
         random_choice_range = 0.0
@@ -164,7 +164,7 @@ def ElementAdditionBipolarThreshold(
 
     if is_torch:
         assert torch is not None
-        total = torch.sum(torch.stack(hvs), dim=0)
+        total = batch.sum(dim=1)
         in_band = torch.abs(total) <= threshold
         random_zone_count = int(in_band.sum().item())
         random_vals = torch.where(
@@ -181,7 +181,7 @@ def ElementAdditionBipolarThreshold(
         )
         return result, {"random_zone_count": random_zone_count}
     else:
-        total = np.add.reduce(hvs)
+        total = batch.sum(axis=1)
         in_band = np.abs(total) <= threshold
         random_zone_count = int(in_band.sum())
         random_vals = np.where(np.random.rand(*total.shape) < 0.5, min_val, max_val)

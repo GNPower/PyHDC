@@ -9,7 +9,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_bundling
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -39,12 +39,12 @@ def Disjunction(*hypervectors: ArrayLike) -> ArrayLike:
         >>> result = Disjunction(v1, v2)
         >>> # result: [1, 1, 1, 0]
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
 
     if is_torch:
-        return torch.stack([hv.bool() for hv in hvs], dim=0).any(dim=0).to(hvs[0].dtype)
+        return batch.bool().any(dim=1).to(batch.dtype)
     else:
-        return np.bitwise_or.reduce(hvs).astype(hvs[0].dtype)
+        return np.bitwise_or.reduce(batch, axis=1).astype(batch.dtype)
 
 
 def DisjunctionThinned(*hypervectors: ArrayLike, density: float = 0.5) -> ArrayLike:
@@ -69,12 +69,10 @@ def DisjunctionThinned(*hypervectors: ArrayLike, density: float = 0.5) -> ArrayL
     """
     from math import ceil
 
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    batch, is_torch, _ = _normalize_bundling(*hypervectors)
 
     if is_torch:
-        bundled = (
-            torch.stack([hv.bool() for hv in hvs], dim=0).any(dim=0).to(hvs[0].dtype)
-        )
+        bundled = batch.bool().any(dim=1).to(batch.dtype)
 
         num_nonzero = ceil(bundled.numel() * density)
         indices = torch.nonzero(bundled, as_tuple=True)[0]
@@ -86,7 +84,7 @@ def DisjunctionThinned(*hypervectors: ArrayLike, density: float = 0.5) -> ArrayL
         result[kept] = 1
         return result
     else:
-        bundled = np.bitwise_or.reduce(hvs).astype(hvs[0].dtype)
+        bundled = np.bitwise_or.reduce(batch, axis=1).astype(batch.dtype)
 
         num_nonzero = ceil(bundled.size * density)
         indices = np.nonzero(bundled)[0]

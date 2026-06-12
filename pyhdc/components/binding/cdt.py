@@ -12,7 +12,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -46,7 +46,7 @@ def AdditiveContextDependentThinning(
     """
     from pyhdc.components.bundling import Disjunction
 
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
     z = Disjunction(*hypervectors)
 
     S = hvs[0].shape[0]

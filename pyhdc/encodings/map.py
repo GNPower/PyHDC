@@ -46,7 +46,7 @@ class MAP_C(Encoding):
     def __init__(
         self,
         dimension: int = 10_000,
-        backend: Backend = "numpy",
+        backend: Optional[Backend] = None,
         device: Optional[Device] = None,
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
@@ -94,7 +94,7 @@ class MAP_I(Encoding):
     def __init__(
         self,
         dimension: int = 10_000,
-        backend: Backend = "numpy",
+        backend: Optional[Backend] = None,
         device: Optional[Device] = None,
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,
@@ -136,7 +136,7 @@ class MAP_I_Bits(Encoding):
     def __init__(
         self,
         dimension: int = 10_000,
-        backend: Backend = "numpy",
+        backend: Optional[Backend] = None,
         device: Optional[Device] = None,
         dtype: Optional[Any] = None,
         mask: int = (2**32) - 1,
@@ -182,7 +182,7 @@ class MAP_B(Encoding):
     def __init__(
         self,
         dimension: int = 10_000,
-        backend: Backend = "numpy",
+        backend: Optional[Backend] = None,
         device: Optional[Device] = None,
         dtype: Optional[Any] = None,
         mask: Optional[int] = None,

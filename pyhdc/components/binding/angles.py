@@ -11,7 +11,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -34,7 +34,7 @@ def ElementAngleAddition(*hypervectors: ArrayLike) -> ArrayLike:
     Returns:
         Bound hypervector with phases in [0, 2Ï€)
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     if is_torch:
         total = torch.sum(torch.stack(hvs), dim=0)
@@ -56,7 +56,7 @@ def ElementAngleSubtraction(*hypervectors: ArrayLike) -> ArrayLike:
     Returns:
         Unbound hypervector with phases in [0, 2Ï€)
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     if is_torch:
         diff = torch.subtract(hvs[0], torch.sum(torch.stack(hvs[1:]), dim=0))

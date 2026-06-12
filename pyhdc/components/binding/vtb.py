@@ -11,7 +11,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -88,7 +88,7 @@ def VectorDerivedTransformation(*hypervectors: ArrayLike) -> ArrayLike:
     Note:
         Requires hypervector dimension to be a perfect fourth power (d = k^4)
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     # Compute V_y matrices for all but the first hypervector
     V_y_list = [_vtb_get_y_prime(hvs[i], is_torch) for i in range(1, len(hvs))]
@@ -126,7 +126,7 @@ def TransposeVectorDerivedTransformation(*hypervectors: ArrayLike) -> ArrayLike:
     Returns:
         Unbound hypervector
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     # Compute transposed V_y matrices
     V_y_list = [_vtb_get_y_prime(hvs[i], is_torch).T for i in range(1, len(hvs))]

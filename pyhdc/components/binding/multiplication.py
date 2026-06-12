@@ -11,7 +11,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_inputs
+from pyhdc.components.input_formatting import _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -40,7 +40,7 @@ def ElementMultiplication(*hypervectors: ArrayLike) -> ArrayLike:
         >>> result = ElementMultiplication(v1, v2)
         >>> # result: [1, -1, -1, 1]
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     if is_torch:
         return torch.prod(torch.stack(hvs), dim=0)
@@ -75,7 +75,7 @@ def MatrixMultiplication(
     Note:
         Requires N-1 matrices to bind N hypervectors
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
     dim = hvs[0].shape[0]
 
     # Generate or validate matrices
@@ -131,7 +131,7 @@ def InverseMatrixMultiplication(
     Returns:
         Unbound hypervector
     """
-    hvs, is_torch, _ = _normalize_inputs(*hypervectors)
+    hvs, is_torch, _ = _normalize_binding(*hypervectors)
 
     if len(matrices) != len(hvs) - 1:
         raise ValueError(
