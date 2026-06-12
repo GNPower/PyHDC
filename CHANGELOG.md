@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-12
+
 ### Added
 
 - Batched hypervectors with a dimension-first `(D, N)` layout (each column is a
@@ -148,7 +150,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyproject.toml` with setuptools build configuration
 - GitHub Actions CI: lint, test, PyPI publish workflows
 
-[Unreleased]: https://github.com/GNPower/PyHDC/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/GNPower/PyHDC/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/GNPower/PyHDC/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/GNPower/PyHDC/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/GNPower/PyHDC/compare/v0.0.1...v1.0.0
