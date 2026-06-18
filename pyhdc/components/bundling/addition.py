@@ -98,51 +98,29 @@ def ElementAdditionBits(
     axis: Union[None, int, Tuple[int, ...]] = None,
 ) -> ArrayLike:
     """
-    Element-wise addition with per-step clipping (bit-limited).
+    Element-wise addition with a single saturating clip at the end.
 
-    Bundles hypervectors by iteratively adding and clipping after each addition.
-    Useful for fixed-point or integer arithmetic where overflow must be prevented.
+    Bundles by summing all vectors, then clipping the total once to
+    ``[min_val, max_val]``. The sum is accumulated in a wide (int64) integer so it
+    cannot overflow the element dtype before the clip, and the clip saturates at
+    the bounds (no wraparound). Summation is order-independent, so a tuple of axes
+    is supported.
 
     Args:
-        *hypervectors: Variable number of hypervectors to bundle, or single 2D batch
-        min_val: Minimum element value (clipped after each addition)
-        max_val: Maximum element value (clipped after each addition)
-        axis: Single batch axis to fold (defaults to the last batch axis). The
-            per-step clip is order-dependent, so a tuple of axes is not supported.
+        *hypervectors: Variable number of hypervectors to bundle, or single batch
+        min_val: Lower saturation bound applied once to the final sum
+        max_val: Upper saturation bound applied once to the final sum
+        axis: Batch axis (or axes) to fold (defaults to the last batch axis).
 
     Returns:
-        Bundled hypervector with per-step clipping
+        Bundled hypervector, summed then clipped to ``[min_val, max_val]``
     """
     batch, is_torch, _, reduce_axes = _normalize_bundling(*hypervectors, axis=axis)
-    if len(reduce_axes) != 1:
-        raise ValueError("ElementAdditionBits supports reducing a single axis only")
-    reduce_axis = reduce_axes[0]
-    num_vectors = batch.shape[reduce_axis]
-
-    # The per-step clip only changes the result when a partial sum leaves
-    # [min_val, max_val]. Partial sums are bounded by +/- the L1 norm along
-    # the reduce axis, so when that bound is within the limits the saturating
-    # accumulation equals a plain sum, computed vectorized instead of looping.
     if is_torch:
-        total = batch.sum(dim=reduce_axis, dtype=batch.dtype)
-        l1 = batch.abs().sum(dim=reduce_axis)
-        if bool((l1 <= max_val).all()) and bool(((-l1) >= min_val).all()):
-            return total
-        result = torch.zeros_like(torch.select(batch, reduce_axis, 0))
-        for j in range(num_vectors):
-            result = result + torch.select(batch, reduce_axis, j)
-            result = torch.clamp(result, min_val, max_val)
-        return result
-
-    total = batch.sum(axis=reduce_axis, dtype=batch.dtype)
-    l1 = np.abs(batch).sum(axis=reduce_axis)
-    if (l1 <= max_val).all() and ((-l1) >= min_val).all():
-        return total
-    result = np.zeros_like(np.take(batch, 0, axis=reduce_axis))
-    for j in range(num_vectors):
-        result = np.add(result, np.take(batch, j, axis=reduce_axis))
-        result = np.clip(result, min_val, max_val)
-    return result
+        total = batch.sum(dim=reduce_axes, dtype=torch.int64)
+        return torch.clamp(total, min_val, max_val).to(batch.dtype)
+    total = batch.sum(axis=reduce_axes, dtype=np.int64)
+    return np.clip(total, min_val, max_val).astype(batch.dtype)
 
 
 def ElementAdditionCut(

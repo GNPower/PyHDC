@@ -14,6 +14,12 @@ except ImportError:
     torch = None
 
 
+from pyhdc.components.binding import (
+    ElementAngleAddition,
+    ElementAngleSubtraction,
+    ElementMultiplication,
+    ExclusiveOr,
+)
 from pyhdc.components.elements import (
     BernoulliBinary,
     BernoulliBipolar,
@@ -30,8 +36,8 @@ from pyhdc.hypervector import BackendManager, EncodingSpec, Hypervector
 from pyhdc.types import ArrayLike, Backend, Device
 
 # Element generators eligible for the vectorized batched-generation fast path.
-# Each is a pure i.i.d. per-element draw, so a single (*batch, D) draw reproduces
-# the sequential per-column loop exactly (see Encoding._fast_path_draw).
+# Each is a pure i.i.d. per-element draw, so the whole batch is drawn in one
+# (D, *batch) call (see Encoding._fast_path_draw).
 _IID_ELEMENT_GENERATORS = frozenset(
     {
         BernoulliBipolar,
@@ -42,6 +48,31 @@ _IID_ELEMENT_GENERATORS = frozenset(
         BernoulliSparse,
     }
 )
+
+# Binders that handle a batched ``(D, *batch)`` input natively (broadcast or
+# vectorize). Any other binder is applied per column when bind/unbind receives a
+# batch, so a batched call still returns a single batched Hypervector.
+_BATCH_SAFE_BINDERS = frozenset(
+    {
+        ElementMultiplication,
+        ExclusiveOr,
+        ElementAngleAddition,
+        ElementAngleSubtraction,
+    }
+)
+
+
+def _warn_batch_dim() -> None:
+    """Emit the deprecation warning for the ``batch_dim`` parameter."""
+    import warnings
+
+    warnings.warn(
+        "batch_dim is deprecated and will be removed in a future release. Pass a "
+        "batched array directly (bundle/bind/unbind batch automatically) or use "
+        "axis= on bundle.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 def _unpack_operation_result(
@@ -246,12 +277,13 @@ class Encoding(ABC):
         """
         Vectorized i.i.d. draw for a batch, or ``None`` to use the sequential loop.
 
-        Produces a ``(D, *batch)`` array byte- and layout-identical to the
-        per-column loop: it draws ``(*batch, D)`` (batch axes first, ``D`` last) so
-        numpy's row-major fill consumes the RNG stream in the same per-vector order,
-        then moves ``D`` to axis 0 and restores C-contiguity. Only the pure i.i.d.
-        element generators qualify, ordered/custom generators and ``SparseSegmented``
-        fall back to the sequential loop.
+        Draws the whole ``(D, *batch)`` array in one call, directly in
+        dimension-first layout, for the pure i.i.d. element generators. The result
+        is reproducible under a fixed seed for a given batch shape, but is not
+        value-identical to generating the vectors one at a time (the RNG stream is
+        consumed as a single block rather than per column). Ordered/custom
+        generators and ``SparseSegmented`` return ``None`` and fall back to the
+        sequential loop.
         """
         if use_generator:
             return None
@@ -259,9 +291,9 @@ class Encoding(ABC):
         if gen not in _IID_ELEMENT_GENERATORS:
             return None
 
-        # Keep every draw keyword-for-keyword identical to its element generator so
-        # the RNG consumption order matches the sequential path exactly.
-        shape = (*batch, dim)
+        # Draw directly in (D, *batch) output layout. Each call mirrors its element
+        # generator keyword-for-keyword so the per-element distribution is identical.
+        shape = (dim, *batch)
         if gen is BernoulliBipolar:
             arr = np.random.choice([-1, 1], size=shape, p=[0.5, 0.5])
         elif gen is BernoulliBinary:
@@ -277,7 +309,6 @@ class Encoding(ABC):
         else:  # pragma: no cover
             return None
 
-        arr = np.moveaxis(arr, -1, 0)
         return np.ascontiguousarray(arr, dtype=self._spec.dtype)
 
     def generate(
@@ -295,10 +326,9 @@ class Encoding(ABC):
         hypervectors of dimension ``D`` stored as columns of a ``(D, N)`` array
         (and likewise ``(D, N, M)`` for higher-rank batches).
 
-        Batched generation is defined as generating the ``N`` hypervectors one at a
-        time and stacking them as columns, so under a fixed seed
-        ``generate(size=(D, N))`` yields exactly the same vectors as ``N`` successive
-        ``generate(size=D)`` calls -- including for ordered generators (LCG/LFSR/...).
+        Batched generation is reproducible under a fixed seed for a given batch
+        shape. For the i.i.d. element generators the batch is drawn in one
+        vectorized call. Ordered and custom generators draw per vector.
 
         Args:
             size: ``None`` or int for a single ``(D,)`` vector; a tuple
@@ -488,6 +518,8 @@ class Encoding(ABC):
         """
         if axis is not None and batch_dim is not None:
             raise ValueError("bundle accepts either axis= or batch_dim=, not both")
+        if batch_dim is not None:
+            _warn_batch_dim()
 
         from pyhdc.components.input_formatting import (
             _detect_batch_structure,
@@ -567,6 +599,59 @@ class Encoding(ABC):
             }
             results.append(Hypervector(result_data[:, j], self, self.backend, meta_j))
         return results
+
+    def _bind_single(self, fn: Callable, data_arrays: List[ArrayLike]) -> Hypervector:
+        """
+        Apply a binding function to one set of operands, batching automatically.
+
+        Element-wise binders broadcast a batch natively. Any other binder is
+        applied per column over the trailing batch axes, so a batched call still
+        returns one batched Hypervector without requiring ``batch_dim``.
+        """
+        import functools
+
+        base_fn = fn.func if isinstance(fn, functools.partial) else fn
+        batched = any(getattr(a, "ndim", 1) > 1 for a in data_arrays)
+        if batched and base_fn not in _BATCH_SAFE_BINDERS:
+            return self._bind_per_column(fn, data_arrays)
+        result = fn(*data_arrays)
+        result_data, metadata = _unpack_operation_result(result, fn)
+        return Hypervector(result_data, self, self.backend, metadata)
+
+    def _bind_per_column(
+        self, fn: Callable, data_arrays: List[ArrayLike]
+    ) -> Hypervector:
+        """Apply a non-batch-safe binder per column over the trailing batch axes."""
+        from pyhdc.components.input_formatting import _broadcast_operands
+
+        is_torch = self.backend == "torch"
+        operands = _broadcast_operands(data_arrays, is_torch)
+        ref = operands[0]
+        dim = ref.shape[0]
+        batch_shape = tuple(int(s) for s in ref.shape[1:])
+        count = 1
+        for size in batch_shape:
+            count *= size
+        flats = [op.reshape(op.shape[0], -1) for op in operands]
+
+        cols = []
+        agg_meta: Dict[str, Any] = {}
+        for i in range(count):
+            result = fn(*(flat[:, i] for flat in flats))
+            res_data, meta = _unpack_operation_result(result, fn)
+            cols.append(res_data)
+            for key, val in meta.items():
+                if key == "operation":
+                    agg_meta[key] = val
+                else:
+                    agg_meta.setdefault(key, []).append(val)
+
+        if is_torch:
+            stacked = torch.stack(cols, dim=-1)
+        else:
+            stacked = np.stack(cols, axis=-1)
+        stacked = stacked.reshape((dim, *batch_shape))
+        return Hypervector(stacked, self, self.backend, agg_meta)
 
     def thin(
         self, hypervector: Union[ArrayLike, Hypervector, List]
@@ -684,52 +769,47 @@ class Encoding(ABC):
         batch_dim: Optional[int] = None,
     ) -> Union[Hypervector, List[Hypervector]]:
         """
-        Bind multiple hypervectors, optionally in batches.
+        Bind hypervectors, batching automatically when the input is batched.
+
+        A single ``(D, N)`` (or higher-rank) batch is bound in one call: the
+        element-wise binders (MAP multiply, BSC xor, FHRR angle add) must broadcast
+        natively, and the others (convolution, shifting, matrix, VTB, CDT) are
+        applied per column internally, so the result is one batched Hypervector.
+        ``batch_dim`` is no longer required.
 
         Args:
-            *hypervectors: Hypervector objects, raw arrays, or lists to bind
-            batch_dim: If provided with 3D+ array, split along this dimension
-                for batching
+            *hypervectors: Hypervector objects, raw arrays, or lists to bind.
+            batch_dim: Deprecated. Splits a 3D+ array along this axis and returns a
+                list of results, pass a batched array directly instead.
 
         Returns:
-            Single Hypervector (if not batched) or List of Hypervectors (if batched)
+            A single Hypervector, or a list of Hypervectors for the deprecated
+            ``batch_dim`` / nested-list forms.
         """
+        if batch_dim is not None:
+            _warn_batch_dim()
+
         from pyhdc.components.input_formatting import (
             _detect_batch_structure,
             _normalize_inputs,
         )
 
-        # Detect if this is a batched operation
         is_batched, groups = _detect_batch_structure(*hypervectors, batch_dim=batch_dim)
-
         if is_batched:
-            # Process each batch group independently
             results = []
             for group in groups:
-                # Normalize each group
                 if isinstance(group, (list, tuple)):
                     data_arrays, _, _ = _normalize_inputs(*group)
                 else:
                     data_arrays, _, _ = _normalize_inputs(group)
-
-                result = self._spec.binding_fn(*data_arrays)
-                result_data, metadata = _unpack_operation_result(
-                    result, self._spec.binding_fn
-                )
-                results.append(Hypervector(result_data, self, self.backend, metadata))
+                results.append(self._bind_single(self._spec.binding_fn, data_arrays))
             return results
-        else:
-            # Single operation
-            if isinstance(groups, (list, tuple)) and len(groups) > 0:
-                data_arrays, _, _ = _normalize_inputs(*groups)
-            else:
-                data_arrays, _, _ = _normalize_inputs(groups)
 
-            result = self._spec.binding_fn(*data_arrays)
-            result_data, metadata = _unpack_operation_result(
-                result, self._spec.binding_fn
-            )
-            return Hypervector(result_data, self, self.backend, metadata)
+        if isinstance(groups, (list, tuple)) and len(groups) > 0:
+            data_arrays, _, _ = _normalize_inputs(*groups)
+        else:
+            data_arrays, _, _ = _normalize_inputs(groups)
+        return self._bind_single(self._spec.binding_fn, data_arrays)
 
     def unbind(
         self,
@@ -737,49 +817,45 @@ class Encoding(ABC):
         batch_dim: Optional[int] = None,
     ) -> Union[Hypervector, List[Hypervector]]:
         """
-        Unbind hypervectors, optionally in batches.
+        Unbind hypervectors, batching automatically when the input is batched.
+
+        Mirrors :meth:`bind`: a single ``(D, N)`` batch is unbound in one call
+        (element-wise unbinders broadcast; the others are applied per column), so
+        ``batch_dim`` is no longer required.
 
         Args:
-            *hypervectors: Hypervector objects, raw arrays, or lists to unbind
-            batch_dim: If provided with 3D+ array, split along this dimension
-                for batching
+            *hypervectors: Hypervector objects, raw arrays, or lists to unbind.
+            batch_dim: Deprecated. Splits a 3D+ array along this axis and returns a
+                list of results, pass a batched array directly instead.
 
         Returns:
-            Single Hypervector (if not batched) or List of Hypervectors (if batched)
+            A single Hypervector, or a list of Hypervectors for the deprecated
+            ``batch_dim`` / nested-list forms.
+
+        Raises:
+            NotImplementedError: For encodings that do not support unbinding.
         """
+        if batch_dim is not None:
+            _warn_batch_dim()
+
         from pyhdc.components.input_formatting import (
             _detect_batch_structure,
             _normalize_inputs,
         )
 
-        # Detect if this is a batched operation
         is_batched, groups = _detect_batch_structure(*hypervectors, batch_dim=batch_dim)
-
         if is_batched:
-            # Process each batch group independently
             results = []
             for group in groups:
-                # Normalize each group
                 if isinstance(group, (list, tuple)):
                     data_arrays, _, _ = _normalize_inputs(*group)
                 else:
                     data_arrays, _, _ = _normalize_inputs(group)
-
-                result = self._spec.unbinding_fn(*data_arrays)
-                result_data, metadata = _unpack_operation_result(
-                    result, self._spec.unbinding_fn
-                )
-                results.append(Hypervector(result_data, self, self.backend, metadata))
+                results.append(self._bind_single(self._spec.unbinding_fn, data_arrays))
             return results
-        else:
-            # Single operation
-            if isinstance(groups, (list, tuple)) and len(groups) > 0:
-                data_arrays, _, _ = _normalize_inputs(*groups)
-            else:
-                data_arrays, _, _ = _normalize_inputs(groups)
 
-            result = self._spec.unbinding_fn(*data_arrays)
-            result_data, metadata = _unpack_operation_result(
-                result, self._spec.unbinding_fn
-            )
-            return Hypervector(result_data, self, self.backend, metadata)
+        if isinstance(groups, (list, tuple)) and len(groups) > 0:
+            data_arrays, _, _ = _normalize_inputs(*groups)
+        else:
+            data_arrays, _, _ = _normalize_inputs(groups)
+        return self._bind_single(self._spec.unbinding_fn, data_arrays)

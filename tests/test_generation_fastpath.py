@@ -1,9 +1,10 @@
 """Tests for the vectorized batched-generation fast path (2.1.0).
 
-The fast path must produce results byte-identical to the sequential per-column
-loop: ``generate(size=(D, N))`` equals ``N`` successive ``generate(size=D)``
-draws under a fixed seed, for every encoding (i.i.d. generators take the fast
-path; ordered/segmented generators fall back to the loop).
+The i.i.d. fast path draws the whole ``(D, *batch)`` array in one call, so it is
+fast and reproducible under a fixed seed for a given shape, but it is NOT
+value-identical to generating the vectors one at a time. Ordered/segmented and
+custom generators fall back to the per-vector loop and so still match their
+sequential output.
 """
 
 import random
@@ -12,6 +13,7 @@ import numpy as np
 import pytest
 
 import pyhdc
+from pyhdc.encodings.base import _IID_ELEMENT_GENERATORS
 
 DIM = 128
 VTB_DIM = 484
@@ -33,7 +35,7 @@ ALL_ENCODINGS = [
     "BSDC_S",
     "BSDC_SEG",
 ]
-# Encodings backed by an i.i.d. element generator (SparseSegmented is excluded).
+# A representative set of encodings backed by an i.i.d. element generator.
 FAST_PATH = ["MAP_C", "MAP_I", "MAP_B", "HRR", "FHRR", "BSC", "BSDC_S"]
 
 
@@ -48,28 +50,48 @@ def _seed(value):
     random.seed(value)
 
 
+def _uses_loop(enc):
+    # The fast path returns None (loop fallback) for non-i.i.d. element generators.
+    return enc._spec.element_generator not in _IID_ELEMENT_GENERATORS
+
+
 @pytest.mark.parametrize("name", ALL_ENCODINGS)
-def test_batch_matches_sequential_2d(name):
+def test_batch_reproducible_with_itself(name):
+    # Same seed + same shape reproduces the same batch, fast path or loop.
     enc = make_enc(name)
     d = enc.dimension
     _seed(123)
-    batch = enc.generate(size=(d, N)).data
+    a = enc.generate(size=(d, N)).data
     _seed(123)
-    cols = [enc.generate(size=d).data for _ in range(N)]
-    seq = np.stack(cols, axis=-1)
-    np.testing.assert_array_equal(batch, seq)
+    b = enc.generate(size=(d, N)).data
+    np.testing.assert_array_equal(a, b)
 
 
 @pytest.mark.parametrize("name", FAST_PATH)
-def test_batch_matches_sequential_3d(name):
+def test_batch_3d_reproducible(name):
     enc = make_enc(name)
     d = enc.dimension
     _seed(7)
-    b3 = enc.generate(size=(d, 3, 2)).data
+    a = enc.generate(size=(d, 3, 2)).data
     _seed(7)
-    cols = [enc.generate(size=d).data for _ in range(6)]
-    seq = np.stack(cols, axis=-1).reshape((d, 3, 2))
-    np.testing.assert_array_equal(b3, seq)
+    b = enc.generate(size=(d, 3, 2)).data
+    np.testing.assert_array_equal(a, b)
+    assert a.shape == (d, 3, 2)
+
+
+@pytest.mark.parametrize("name", ALL_ENCODINGS)
+def test_loop_generators_match_sequential(name):
+    # Generators that fall back to the per-vector loop still equal N (D,) draws.
+    enc = make_enc(name)
+    if not _uses_loop(enc):
+        pytest.skip("uses the vectorized fast path, not the sequential loop")
+    d = enc.dimension
+    _seed(7)
+    batch = enc.generate(size=(d, N)).data
+    _seed(7)
+    cols = [enc.generate(size=d).data for _ in range(N)]
+    seq = np.stack(cols, axis=-1)
+    np.testing.assert_array_equal(batch, seq)
 
 
 @pytest.mark.parametrize("name", ALL_ENCODINGS)
@@ -77,7 +99,7 @@ def test_fast_path_layout_and_dtype(name):
     enc = make_enc(name)
     d = enc.dimension
     data = enc.generate(size=(d, N)).data
-    assert data.flags["C_CONTIGUOUS"]  # matches the 2.0 np.stack(...).reshape layout
+    assert data.flags["C_CONTIGUOUS"]
     assert data.shape == (d, N)
     assert data.dtype == enc.generate().data.dtype
 
@@ -97,17 +119,16 @@ def test_custom_generator_falls_back_and_reproduces():
 @pytest.mark.skipif(not pyhdc.TORCH_AVAILABLE, reason="PyTorch not installed")
 class TestTorchFastPath:
     @pytest.mark.parametrize("name", ["MAP_I", "MAP_C", "HRR", "BSC"])
-    def test_torch_batch_matches_sequential(self, name):
+    def test_torch_batch_reproducible(self, name):
         import torch
 
         cls = getattr(pyhdc, name)
         enc = cls(dimension=DIM, backend="torch")
         _seed(99)
-        batch = enc.generate(size=(DIM, N)).data
+        a = enc.generate(size=(DIM, N)).data
         _seed(99)
-        cols = [enc.generate(size=DIM).data for _ in range(N)]
-        seq = torch.stack(cols, dim=-1)
-        assert torch.equal(batch, seq)
+        b = enc.generate(size=(DIM, N)).data
+        assert torch.equal(a, b)
 
     def test_torch_fast_path_contiguous(self):
         enc = pyhdc.MAP_I(dimension=DIM, backend="torch")

@@ -112,28 +112,34 @@ def DisjunctionThinned(
         result[kept] = 1
         return result
 
-    # Batched result (D, *rest): thin each column over axis 0 independently.
-    num_nonzero = ceil(bundled.shape[0] * density)
-    flat = bundled.reshape(bundled.shape[0], -1)
-    if is_torch:
-        out = torch.zeros_like(flat)
-        for col in range(flat.shape[1]):
-            column = flat[:, col]
-            indices = torch.nonzero(column, as_tuple=True)[0]
-            if num_nonzero >= indices.numel():
-                out[:, col] = column
-                continue
-            perm = torch.randperm(indices.numel())[:num_nonzero]
-            out[indices[perm], col] = 1
-        return out.reshape(bundled.shape)
+    # Batched result (D, *rest): thin each column over axis 0 independently
+    dim = bundled.shape[0]
+    num_nonzero = ceil(dim * density)
+    if num_nonzero <= 0:
+        return np.zeros_like(bundled) if not is_torch else torch.zeros_like(bundled)
+    if num_nonzero >= dim:
+        return bundled
 
-    out = np.zeros_like(flat)
-    for col in range(flat.shape[1]):
-        column = flat[:, col]
-        indices = np.nonzero(column)[0]
-        if num_nonzero >= indices.size:
-            out[:, col] = column
-            continue
-        kept = np.random.choice(indices, size=num_nonzero, replace=False)
-        out[kept, col] = 1
-    return out.reshape(bundled.shape)
+    flat = bundled.reshape(dim, -1)
+    cols = flat.shape[1]
+
+    if is_torch:
+        keys = torch.where(
+            flat != 0,
+            torch.rand(flat.shape, device=flat.device),
+            torch.full(flat.shape, float("inf"), device=flat.device),
+        )
+        keep = torch.topk(keys, num_nonzero, dim=0, largest=False).indices
+        col_idx = torch.arange(cols, device=flat.device).expand(num_nonzero, cols)
+        finite = torch.isfinite(torch.gather(keys, 0, keep))
+        out = torch.zeros_like(flat)
+        out[keep[finite], col_idx[finite]] = 1
+        return out.reshape(bundled.shape)
+    else:
+        keys = np.where(flat != 0, np.random.random(flat.shape), np.inf)
+        keep = np.argpartition(keys, num_nonzero - 1, axis=0)[:num_nonzero]
+        col_idx = np.broadcast_to(np.arange(cols), keep.shape)
+        finite = np.isfinite(keys[keep, col_idx])
+        out = np.zeros_like(flat)
+        out[keep[finite], col_idx[finite]] = 1
+        return out.reshape(bundled.shape)

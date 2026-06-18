@@ -26,14 +26,18 @@ def test_batched_generation_higher_rank():
     assert batch.shape == (32, 3, 2)
 
 
-def test_batched_generation_matches_sequential_numpy():
-    """Under a fixed seed, a (D, N) batch equals N successive (D,) generations."""
+def test_batched_generation_reproducible_with_itself():
+    """A fixed seed and shape reproduce the same batch.
+
+    The i.i.d. fast path draws the whole batch in one block, so it is not
+    value-identical to N separate (D,) draws; it must still reproduce itself.
+    """
     enc = pyhdc.MAP_I(dimension=128)
     np.random.seed(123)
-    batch = enc.generate(size=(128, 4)).data
+    a = enc.generate(size=(128, 4)).data
     np.random.seed(123)
-    seq = np.stack([enc.generate(size=128).data for _ in range(4)], axis=-1)
-    np.testing.assert_array_equal(batch, seq)
+    b = enc.generate(size=(128, 4)).data
+    np.testing.assert_array_equal(a, b)
 
 
 def test_batched_generation_matches_sequential_custom_generator():
