@@ -88,7 +88,7 @@ from pyhdc.exceptions import (
 from pyhdc.generation.base import DefaultGenerator, HDCGenerator
 
 # Core classes and functions from hypervector module
-from pyhdc.hypervector import (  # Core classes; Backend availability; Convenience functions
+from pyhdc.hypervector import (
     TORCH_AVAILABLE,
     BackendManager,
     EncodingSpec,
@@ -96,7 +96,12 @@ from pyhdc.hypervector import (  # Core classes; Backend availability; Convenien
     bind,
     bundle,
     generate,
+    inverse,
+    negative,
+    normalize,
+    permute,
     stack,
+    unbind,
     zeros,
 )
 
@@ -131,13 +136,19 @@ __all__ = [
     "BSDC_CDT",
     "BSDC_S",
     "BSDC_SEG",
+    "BSDC_THIN",
     "FHRR",
     # Convenience functions
     "generate",
     "zeros",
     "bundle",
     "bind",
+    "unbind",
     "stack",
+    "permute",
+    "inverse",
+    "negative",
+    "normalize",
     # Global backend/device preferences
     "prefer_torch",
     "prefer_cuda",

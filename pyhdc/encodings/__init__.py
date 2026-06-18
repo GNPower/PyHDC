@@ -12,14 +12,18 @@ Available encodings:
 - MAP-I-Bits: MAP-I variant using custom integer bitwidths
 - HRR: Holographic Reduced Representations for Continuous Hypervectors
 - HRR-NoNorm: HRR variant without normalization
-- HRR-ConstNorm: HRR variant with constant normalization by sqrt(M), where M is the number of vectors bundled
+- HRR-ConstNorm: HRR variant with constant normalization by sqrt(M),
+  where M is the number of vectors bundled
 - VTB: Vector-derived Transformation Binding for Continuous Hypervectors
 - MBAT: Matrix Binding of Additive Terms for Continuous Hypervectors
 - MAP-B: Multiplicative Additive Permutation for Binary Hypervectors
 - BSC: Binary Sparse Coding for Sparse Binary Hypervectors
-- BSDC-CDT: Binary Sparse Distributed Coding with Count Distribution for Sparse Binary Hypervectors
-- BSDC-S: Binary Sparse Distributed Coding with Sparse Distribution for Sparse Binary Hypervectors
-- BSDC-SEG: Binary Sparse Distributed Coding with Sparse Segmented Distribution for Sparse Binary Hypervectors
+- BSDC-CDT: Binary Sparse Distributed Coding with Context Dependant Thinning for
+  Sparse Binary Hypervectors
+- BSDC-S: Binary Sparse Distributed Coding with Sparse Distribution for
+  Sparse Binary Hypervectors
+- BSDC-SEG: Binary Sparse Distributed Coding with Sparse Segmented
+  Distribution for Sparse Binary Hypervectors
 - BSDC-THIN: BSDC with post-bundling random thinning to maintain density constraint
 - FHRR: Fourier Holographic Reduced Representations for Complex Hypervectors
 """

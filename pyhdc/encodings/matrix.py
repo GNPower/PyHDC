@@ -17,6 +17,7 @@ from pyhdc.components.bundling import ElementAdditionNormalized
 from pyhdc.components.elements import NormalReal
 from pyhdc.components.similarity import CosineSimilarity
 from pyhdc.components.thinning import NoThin
+from pyhdc.components.unary import L2Normalize, Negate
 from pyhdc.encodings.base import Encoding
 from pyhdc.hypervector import EncodingSpec
 
@@ -42,6 +43,8 @@ class VTB(Encoding):
             binding_fn=VectorDerivedTransformation,
             unbinding_fn=TransposeVectorDerivedTransformation,
             generator_output_type="floats",
+            normalize_fn=L2Normalize,
+            negative_fn=Negate,
         )
 
 
@@ -62,4 +65,6 @@ class MBAT(Encoding):
             binding_fn=MatrixMultiplication,
             unbinding_fn=InverseMatrixMultiplication,
             generator_output_type="floats",
+            normalize_fn=L2Normalize,
+            negative_fn=Negate,
         )

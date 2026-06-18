@@ -1,4 +1,5 @@
 ﻿from abc import ABC, abstractmethod
+from math import pi, sqrt
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -13,11 +14,34 @@ except ImportError:
     torch = None
 
 
+from pyhdc.components.elements import (
+    BernoulliBinary,
+    BernoulliBipolar,
+    BernoulliSparse,
+    NormalReal,
+    UniformAngles,
+    UniformBipolar,
+)
+from pyhdc.components.unary import CyclicShift
 from pyhdc.config import get_default_backend, get_default_device
 from pyhdc.exceptions import GeneratorNotSupportedError
 from pyhdc.generation.base import DefaultGenerator, HDCGenerator
 from pyhdc.hypervector import BackendManager, EncodingSpec, Hypervector
 from pyhdc.types import ArrayLike, Backend, Device
+
+# Element generators eligible for the vectorized batched-generation fast path.
+# Each is a pure i.i.d. per-element draw, so a single (*batch, D) draw reproduces
+# the sequential per-column loop exactly (see Encoding._fast_path_draw).
+_IID_ELEMENT_GENERATORS = frozenset(
+    {
+        BernoulliBipolar,
+        BernoulliBinary,
+        UniformBipolar,
+        UniformAngles,
+        NormalReal,
+        BernoulliSparse,
+    }
+)
 
 
 def _unpack_operation_result(
@@ -48,7 +72,8 @@ def _unpack_operation_result(
             enhanced_metadata = {"operation": op_name, **metadata}
             return data, enhanced_metadata
         else:
-            # Non-dict secondary return (e.g. MatrixMultiplication returns matrices list)
+            # Non-dict secondary return
+            # (e.g. MatrixMultiplication returns matrices list)
             return data, {"operation": op_name, "aux": metadata}
     return result, {}
 
@@ -86,7 +111,8 @@ class Encoding(ABC):
             generator: Optional custom generator (uses default if None)
             similarity_remap: Optional callable applied to every similarity result
                 before returning. All similarity functions return [-1, 1] by default;
-                use this to remap the output, e.g. ``pyhdc.components.similarity.remap_to_unit``
+                use this to remap the output, e.g.
+                ``pyhdc.components.similarity.remap_to_unit``
                 to shift to [0, 1].
         """
         if backend is None:
@@ -214,6 +240,46 @@ class Encoding(ABC):
             return self._generate_with_generator(dim)
         return self._spec.element_generator(dim, self._spec.dtype)
 
+    def _fast_path_draw(
+        self, dim: int, batch: Tuple[int, ...], use_generator: bool
+    ) -> Optional[np.ndarray]:
+        """
+        Vectorized i.i.d. draw for a batch, or ``None`` to use the sequential loop.
+
+        Produces a ``(D, *batch)`` array byte- and layout-identical to the
+        per-column loop: it draws ``(*batch, D)`` (batch axes first, ``D`` last) so
+        numpy's row-major fill consumes the RNG stream in the same per-vector order,
+        then moves ``D`` to axis 0 and restores C-contiguity. Only the pure i.i.d.
+        element generators qualify, ordered/custom generators and ``SparseSegmented``
+        fall back to the sequential loop.
+        """
+        if use_generator:
+            return None
+        gen = self._spec.element_generator
+        if gen not in _IID_ELEMENT_GENERATORS:
+            return None
+
+        # Keep every draw keyword-for-keyword identical to its element generator so
+        # the RNG consumption order matches the sequential path exactly.
+        shape = (*batch, dim)
+        if gen is BernoulliBipolar:
+            arr = np.random.choice([-1, 1], size=shape, p=[0.5, 0.5])
+        elif gen is BernoulliBinary:
+            arr = np.random.binomial(size=shape, n=1, p=0.5)
+        elif gen is UniformBipolar:
+            arr = np.random.uniform(-1, 1, shape)
+        elif gen is UniformAngles:
+            arr = np.random.uniform(-pi, pi, shape)
+        elif gen is NormalReal:
+            arr = np.random.normal(0, sqrt(1 / dim), size=shape)
+        elif gen is BernoulliSparse:
+            arr = np.random.binomial(size=shape, n=1, p=1 / sqrt(dim))
+        else:  # pragma: no cover
+            return None
+
+        arr = np.moveaxis(arr, -1, 0)
+        return np.ascontiguousarray(arr, dtype=self._spec.dtype)
+
     def generate(
         self,
         size: Union[int, Tuple[int, ...]] = None,
@@ -263,11 +329,15 @@ class Encoding(ABC):
             if not batch:
                 data = self._generate_one(dim, use_generator)
             else:
-                count = 1
-                for axis in batch:
-                    count *= int(axis)
-                columns = [self._generate_one(dim, use_generator) for _ in range(count)]
-                data = np.stack(columns, axis=-1).reshape((dim, *batch))
+                data = self._fast_path_draw(dim, batch, use_generator)
+                if data is None:
+                    count = 1
+                    for axis in batch:
+                        count *= int(axis)
+                    columns = [
+                        self._generate_one(dim, use_generator) for _ in range(count)
+                    ]
+                    data = np.stack(columns, axis=-1).reshape((dim, *batch))
         else:
             raise ValueError(f"Invalid size specification: {size}")
 
@@ -315,7 +385,8 @@ class Encoding(ABC):
             generator: The new generator to use
 
         Raises:
-            GeneratorNotSupportedError: If generator doesn't support required output type
+            GeneratorNotSupportedError: If generator doesn't support required
+                output type
         """
         self._generator = generator
         self._validate_generator()
@@ -328,6 +399,8 @@ class Encoding(ABC):
         self,
         hvA: Union[ArrayLike, Hypervector, List],
         hvB: Optional[Union[ArrayLike, Hypervector, List]] = None,
+        *,
+        axis: Optional[int] = None,
     ) -> Union[float, ArrayLike, List[Union[float, ArrayLike]]]:
         """
         Compute similarity between hypervector(s).
@@ -368,7 +441,7 @@ class Encoding(ABC):
             for a, b in zip(hvA, hvB):
                 data_a = _extract_data(a)
                 data_b = _extract_data(b)
-                sim = self._spec.similarity_fn(data_a, data_b)
+                sim = self._spec.similarity_fn(data_a, data_b, axis=axis)
                 if self._similarity_remap is not None:
                     sim = self._similarity_remap(sim)
                 results.append(sim)
@@ -376,9 +449,11 @@ class Encoding(ABC):
 
         # Single (D, N) batch (hvB omitted) or a two-operand comparison
         if hvB is None:
-            result = self._spec.similarity_fn(_extract_data(hvA))
+            result = self._spec.similarity_fn(_extract_data(hvA), axis=axis)
         else:
-            result = self._spec.similarity_fn(_extract_data(hvA), _extract_data(hvB))
+            result = self._spec.similarity_fn(
+                _extract_data(hvA), _extract_data(hvB), axis=axis
+            )
         if self._similarity_remap is not None:
             result = self._similarity_remap(result)
         return result
@@ -386,6 +461,7 @@ class Encoding(ABC):
     def bundle(
         self,
         *hypervectors: Union[ArrayLike, Hypervector, List],
+        axis: Union[None, int, Tuple[int, ...]] = None,
         batch_dim: Optional[int] = None,
     ) -> Union[Hypervector, List[Hypervector]]:
         """
@@ -393,7 +469,8 @@ class Encoding(ABC):
 
         Args:
             *hypervectors: Hypervector objects, raw arrays, or lists to bundle
-            batch_dim: If provided with 3D+ array, split along this dimension for batching
+            batch_dim: If provided with 3D+ array, split along this dimension
+                for batching
 
         Returns:
             Single Hypervector (if not batched) or List of Hypervectors (if batched)
@@ -405,18 +482,39 @@ class Encoding(ABC):
 
             >>> # Batched bundles (new)
             >>> bsc.bundle([[hv1, hv2], [hv3, hv4]])  # Returns: [bundled1, bundled2]
-            >>> bsc.bundle(array_3d, batch_dim=0)  # Returns: list of bundled hypervectors
+            >>> bsc.bundle(array_3d, batch_dim=0)
+            ... # Returns: list of bundled hypervectors
+            >>> enc.bundle(tensor_DNM, axis=2)  # (D, N, M) -> (D, N)
         """
+        if axis is not None and batch_dim is not None:
+            raise ValueError("bundle accepts either axis= or batch_dim=, not both")
+
         from pyhdc.components.input_formatting import (
             _detect_batch_structure,
+            _extract_data,
             _normalize_inputs,
         )
+
+        # Vectorized fast path: a single 3D array split by batch_dim is the same
+        # as reducing the *other* batch axis in one op, then splitting the result.
+        # Taken before _detect_batch_structure so we skip its per-slice split and
+        # the per-group loop. Ragged nested lists, batch_dim=0, and 4D+ fall
+        # through; the wrapper loop in _split_batch_result does no numerical work.
+        if batch_dim in (1, 2) and len(hypervectors) == 1:
+            arr = _extract_data(hypervectors[0])
+            if getattr(arr, "ndim", 0) == 3:
+                reduce_axis = 2 if batch_dim == 1 else 1
+                result = self._spec.bundling_fn(arr, axis=reduce_axis)
+                result_data, metadata = _unpack_operation_result(
+                    result, self._spec.bundling_fn
+                )
+                return self._split_batch_result(result_data, metadata)
 
         # Detect if this is a batched operation
         is_batched, groups = _detect_batch_structure(*hypervectors, batch_dim=batch_dim)
 
         if is_batched:
-            # Process each batch group independently
+            # General path: per-group loop (ragged nested lists, other ranks).
             results = []
             for group in groups:
                 # Normalize each group
@@ -438,11 +536,37 @@ class Encoding(ABC):
             else:
                 data_arrays, _, _ = _normalize_inputs(groups)
 
-            result = self._spec.bundling_fn(*data_arrays)
+            result = self._spec.bundling_fn(*data_arrays, axis=axis)
             result_data, metadata = _unpack_operation_result(
                 result, self._spec.bundling_fn
             )
             return Hypervector(result_data, self, self.backend, metadata)
+
+    def _split_batch_result(
+        self, result_data: ArrayLike, metadata: Dict[str, Any]
+    ) -> List[Hypervector]:
+        """
+        Split a vectorized ``(D, n)`` bundle result into ``n`` ``(D,)`` Hypervectors.
+
+        Backs the ``batch_dim`` fast path. Per-output metadata arrays (whose last
+        axis matches the kept batch axis) are sliced per result, scalars and the
+        ``operation`` name are shared.
+        """
+        n = result_data.shape[1]
+        results = []
+        for j in range(n):
+            meta_j = {
+                key: (
+                    val[..., j]
+                    if hasattr(val, "shape")
+                    and getattr(val, "ndim", 0) >= 1
+                    and val.shape[-1] == n
+                    else val
+                )
+                for key, val in metadata.items()
+            }
+            results.append(Hypervector(result_data[:, j], self, self.backend, meta_j))
+        return results
 
     def thin(
         self, hypervector: Union[ArrayLike, Hypervector, List]
@@ -488,6 +612,72 @@ class Encoding(ABC):
             )
             return Hypervector(result_data, self, self.backend, metadata)
 
+    def permute(
+        self, hypervector: Union[ArrayLike, Hypervector], shift: int = 1
+    ) -> Hypervector:
+        """
+        Permute (cyclic-shift) a hypervector along the dimension axis (axis 0).
+
+        Args:
+            hypervector: Hypervector or raw array to permute.
+            shift: Positions to roll along axis 0; negative inverts the permute.
+
+        Returns:
+            A new permuted Hypervector.
+        """
+        from pyhdc.components.input_formatting import _extract_data
+
+        fn = self._spec.permute_fn or CyclicShift
+        data = _extract_data(hypervector)
+        result = fn(data, shift=shift)
+        result_data, metadata = _unpack_operation_result(result, fn)
+        return Hypervector(result_data, self, self.backend, metadata)
+
+    def inverse(self, hypervector: Union[ArrayLike, Hypervector]) -> Hypervector:
+        """
+        Binding inverse of a hypervector.
+
+        Raises ``NotImplementedError`` for encodings whose binding has no defined
+        inverse (e.g. MAP_C continuous, VTB, MBAT, BSDC_*).
+        """
+        from pyhdc.components.input_formatting import _extract_data
+
+        data = _extract_data(hypervector)
+        result = self._spec.inverse_fn(data)
+        result_data, metadata = _unpack_operation_result(result, self._spec.inverse_fn)
+        return Hypervector(result_data, self, self.backend, metadata)
+
+    def negative(self, hypervector: Union[ArrayLike, Hypervector]) -> Hypervector:
+        """
+        Bundling (additive) inverse of a hypervector.
+
+        Raises ``NotImplementedError`` for encodings with no defined negative
+        (e.g. FHRR, BSC, BSDC_*).
+        """
+        from pyhdc.components.input_formatting import _extract_data
+
+        data = _extract_data(hypervector)
+        result = self._spec.negative_fn(data)
+        result_data, metadata = _unpack_operation_result(result, self._spec.negative_fn)
+        return Hypervector(result_data, self, self.backend, metadata)
+
+    def normalize(self, hypervector: Union[ArrayLike, Hypervector]) -> Hypervector:
+        """
+        Normalize a hypervector to its encoding's canonical form (L2 unit length
+        for real encodings, bipolar sign for MAP, phase wrap for FHRR).
+
+        Raises ``NotImplementedError`` for encodings with no defined normalization
+        (e.g. BSC, BSDC_*).
+        """
+        from pyhdc.components.input_formatting import _extract_data
+
+        data = _extract_data(hypervector)
+        result = self._spec.normalize_fn(data)
+        result_data, metadata = _unpack_operation_result(
+            result, self._spec.normalize_fn
+        )
+        return Hypervector(result_data, self, self.backend, metadata)
+
     def bind(
         self,
         *hypervectors: Union[ArrayLike, Hypervector, List],
@@ -498,7 +688,8 @@ class Encoding(ABC):
 
         Args:
             *hypervectors: Hypervector objects, raw arrays, or lists to bind
-            batch_dim: If provided with 3D+ array, split along this dimension for batching
+            batch_dim: If provided with 3D+ array, split along this dimension
+                for batching
 
         Returns:
             Single Hypervector (if not batched) or List of Hypervectors (if batched)
@@ -550,7 +741,8 @@ class Encoding(ABC):
 
         Args:
             *hypervectors: Hypervector objects, raw arrays, or lists to unbind
-            batch_dim: If provided with 3D+ array, split along this dimension for batching
+            batch_dim: If provided with 3D+ array, split along this dimension
+                for batching
 
         Returns:
             Single Hypervector (if not batched) or List of Hypervectors (if batched)

@@ -17,9 +17,10 @@ from pyhdc.components.bundling import (
     ElementAdditionBits,
     ElementAdditionCut,
 )
-from pyhdc.components.elements import BernoulliBiploar, UniformBipolar
+from pyhdc.components.elements import BernoulliBipolar, UniformBipolar
 from pyhdc.components.similarity import CosineSimilarity
 from pyhdc.components.thinning import NoThin
+from pyhdc.components.unary import IdentityInverse, Negate, SignNormalize
 from pyhdc.encodings.base import Encoding
 from pyhdc.generation.base import HDCGenerator
 from pyhdc.hypervector import EncodingSpec
@@ -31,7 +32,7 @@ from pyhdc.types import Backend, Device
 
 
 class MAP_C(Encoding):
-    """
+    r"""
     Multiply-Add-Permute encoding with continuous values.
 
     Uses bipolar values with element-wise multiplication for binding
@@ -39,7 +40,7 @@ class MAP_C(Encoding):
 
     Args:
         random_choice_range: Optional float (rho). When set, coordinates whose
-            |pre-aggregate sum| <= rho * sqrt(N/3) are replaced by independent
+            \|pre-aggregate sum\| <= rho * sqrt(N/3) are replaced by independent
             Uniform[-1,1] draws during bundling (band randomization).
     """
 
@@ -75,11 +76,13 @@ class MAP_C(Encoding):
             binding_fn=ElementMultiplication,
             unbinding_fn=ElementMultiplication,
             generator_output_type="floats",
+            normalize_fn=SignNormalize,
+            negative_fn=Negate,
         )
 
 
 class MAP_I(Encoding):
-    """
+    r"""
     Multiply-Add-Permute encoding with integer values.
 
     Uses bipolar integer values with element-wise multiplication for binding
@@ -87,7 +90,7 @@ class MAP_I(Encoding):
 
     Args:
         random_choice_range: Optional float (rho). When set, coordinates whose
-            |pre-aggregate sum| <= rho * sqrt(N) are replaced by independent
+            \|pre-aggregate sum\| <= rho * sqrt(N) are replaced by independent
             {-1, +1} draws during bundling (band randomization).
     """
 
@@ -116,13 +119,16 @@ class MAP_I(Encoding):
             bundling_fn = ElementAddition
         return EncodingSpec(
             dtype=np.int32,
-            element_generator=BernoulliBiploar,
+            element_generator=BernoulliBipolar,
             similarity_fn=CosineSimilarity,
             bundling_fn=bundling_fn,
             thinning_fn=NoThin,
             binding_fn=ElementMultiplication,
             unbinding_fn=ElementMultiplication,
             generator_output_type="bits",
+            inverse_fn=IdentityInverse,
+            normalize_fn=SignNormalize,
+            negative_fn=Negate,
         )
 
 
@@ -156,7 +162,7 @@ class MAP_I_Bits(Encoding):
         )
         return EncodingSpec(
             dtype=np.int32,
-            element_generator=BernoulliBiploar,
+            element_generator=BernoulliBipolar,
             similarity_fn=CosineSimilarity,
             bundling_fn=bundling_fn,
             thinning_fn=NoThin,
@@ -164,18 +170,21 @@ class MAP_I_Bits(Encoding):
             unbinding_fn=ElementMultiplication,
             mask=self._mask,
             generator_output_type="words",
+            inverse_fn=IdentityInverse,
+            normalize_fn=SignNormalize,
+            negative_fn=Negate,
         )
 
 
 class MAP_B(Encoding):
-    """
+    r"""
     Multiply-Add-Permute with bipolar thresholding.
 
     Uses bipolar values with thresholding during bundling.
 
     Args:
         random_choice_range: Optional float (rho). When set, coordinates whose
-            |bipolar sum| <= rho * sqrt(N) are replaced by independent {-1, +1}
+            \|bipolar sum\| <= rho * sqrt(N) are replaced by independent {-1, +1}
             draws during bundling (band randomization).
     """
 
@@ -205,11 +214,14 @@ class MAP_B(Encoding):
             bundling_fn = ElementAdditionBipolarThreshold
         return EncodingSpec(
             dtype=np.int8,
-            element_generator=BernoulliBiploar,
+            element_generator=BernoulliBipolar,
             similarity_fn=CosineSimilarity,
             bundling_fn=bundling_fn,
             thinning_fn=NoThin,
             binding_fn=ElementMultiplication,
             unbinding_fn=ElementMultiplication,
             generator_output_type="bits",
+            inverse_fn=IdentityInverse,
+            normalize_fn=SignNormalize,
+            negative_fn=Negate,
         )

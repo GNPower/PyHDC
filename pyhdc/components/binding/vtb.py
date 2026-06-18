@@ -11,7 +11,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_binding
+from pyhdc.components.input_formatting import _normalize_binding, _require_single_vector
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -48,10 +48,6 @@ def _vtb_get_y_prime(y: ArrayLike, is_torch: bool) -> ArrayLike:
         V_prime = y.reshape(d_prime, d_prime)
         # Create block diagonal
         Z_prime = torch.zeros((d_prime, d_prime), dtype=y.dtype, device=y.device)
-        blocks = [
-            [V_prime if i == j else Z_prime for i in range(d_prime)]
-            for j in range(d_prime)
-        ]
         # Flatten and concatenate blocks
         V_y = torch.block_diag(*[V_prime for _ in range(d_prime)])
         V_y = d_quart * V_y
@@ -89,6 +85,7 @@ def VectorDerivedTransformation(*hypervectors: ArrayLike) -> ArrayLike:
         Requires hypervector dimension to be a perfect fourth power (d = k^4)
     """
     hvs, is_torch, _ = _normalize_binding(*hypervectors)
+    _require_single_vector(hvs, "VectorDerivedTransformation")
 
     # Compute V_y matrices for all but the first hypervector
     V_y_list = [_vtb_get_y_prime(hvs[i], is_torch) for i in range(1, len(hvs))]
@@ -127,6 +124,7 @@ def TransposeVectorDerivedTransformation(*hypervectors: ArrayLike) -> ArrayLike:
         Unbound hypervector
     """
     hvs, is_torch, _ = _normalize_binding(*hypervectors)
+    _require_single_vector(hvs, "TransposeVectorDerivedTransformation")
 
     # Compute transposed V_y matrices
     V_y_list = [_vtb_get_y_prime(hvs[i], is_torch).T for i in range(1, len(hvs))]

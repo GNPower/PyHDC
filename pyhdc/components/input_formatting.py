@@ -97,38 +97,145 @@ def _as_2d_columns(array: ArrayLike, is_torch: bool) -> ArrayLike:
     return array
 
 
-def _normalize_bundling(
-    *arrays: Union[ArrayLike, "Hypervector"]
-) -> Tuple[ArrayLike, bool, Optional["Hypervector"]]:
+def _resolve_reduce_axes(
+    input_ndim: int, axis: Union[None, int, Tuple[int, ...]]
+) -> Tuple[int, ...]:
     """
-    Normalize bundling inputs to a single ``(D, N)`` array of column hypervectors.
+    Resolve a user ``axis`` spec to a validated tuple of reduce axes.
 
-    Every supported call shape collapses to one dimension-first 2D array whose
-    columns are the hypervectors to bundle, so each bundling function only has to
-    reduce over axis 1:
+    ``axis=None`` selects the last batch axis (so ``(D, N)`` reduces axis 1 as in
+    2.0 and ``(D, N, M)`` reduces axis 2). Negatives are normalized. Duplicates,
+    out-of-range axes, and axis 0 (the hypervector dimension ``D``) are rejected.
+    """
+    if axis is None:
+        if input_ndim <= 1:
+            return ()
+        return (input_ndim - 1,)
 
-    - ``bundle(a, b, c)`` with ``(D,)`` vectors      -> ``(D, 3)``
-    - ``bundle(batch)`` with a ``(D, N)`` batch      -> ``(D, N)``
-    - ``bundle(a, batch)`` mixing the two            -> concatenated ``(D, 1 + N)``
+    axes = (axis,) if isinstance(axis, (int, np.integer)) else tuple(axis)
+    resolved: List[int] = []
+    for value in axes:
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise ValueError(f"axis must be an int or tuple of ints, got {axis!r}")
+        norm = int(value) + input_ndim if value < 0 else int(value)
+        if norm < 0 or norm >= input_ndim:
+            raise ValueError(f"axis {value} is out of range for a {input_ndim}D array")
+        if norm == 0:
+            raise ValueError(
+                "axis 0 is the hypervector dimension and cannot be reduced"
+            )
+        resolved.append(norm)
+    if len(set(resolved)) != len(resolved):
+        raise ValueError(f"duplicate reduce axes in {axis!r}")
+    return tuple(resolved)
 
-    Args:
-        *arrays: Hypervectors or raw arrays to bundle together.
+
+def _reduce_count(batch: ArrayLike, reduce_axes: Tuple[int, ...]) -> int:
+    """Number of hypervectors folded together (product of the reduce-axis sizes)."""
+    count = 1
+    for a in reduce_axes:
+        count *= int(batch.shape[a])
+    return count
+
+
+def _zone_count(mask: ArrayLike, is_torch: bool) -> Any:
+    """
+    Random-zone count for bundling metadata, gated on the result rank.
+
+    Returns a Python ``int`` for a ``(D,)`` result (the 2.0 contract) and a
+    per-output-vector count array (summed over axis 0) for a surviving-batch
+    result such as ``(D, M)``.
+    """
+    if getattr(mask, "ndim", 1) == 1:
+        return int(mask.sum().item()) if is_torch else int(mask.sum())
+    return mask.sum(dim=0) if is_torch else mask.sum(axis=0)
+
+
+def _pad_trailing(array: ArrayLike, target_ndim: int, is_torch: bool) -> ArrayLike:
+    """Append trailing length-1 axes until ``array`` has ``target_ndim`` dims."""
+    del is_torch  # numpy and torch both support ``array[..., None]``
+    while getattr(array, "ndim", 1) < target_ndim:
+        array = array[..., None]
+    return array
+
+
+def _require_single_vector(operands: List[ArrayLike], op_name: str) -> None:
+    """Raise if any operand is batched (ndim > 1) for a non-batch-safe operation."""
+    for operand in operands:
+        if getattr(operand, "ndim", 1) > 1:
+            raise ValueError(
+                f"{op_name} only supports single (D,) hypervectors; got shape "
+                f"{tuple(operand.shape)}. Use batch_dim= at the Encoding layer "
+                f"to loop over a batch."
+            )
+
+
+def _broadcast_operands(operands: List[ArrayLike], is_torch: bool) -> List[ArrayLike]:
+    """
+    Pad operands with trailing length-1 axes so they broadcast element-wise.
+
+    Aligns mixed ranks for element-wise binding: a ``(D,)`` operand bound against a
+    ``(D, N)`` batch is padded to ``(D, 1)`` so it broadcasts over the N columns.
+    Equal-rank operands are returned unchanged (2.0 behavior).
+    """
+    target = max(getattr(op, "ndim", 1) for op in operands)
+    return [_pad_trailing(op, target, is_torch) for op in operands]
+
+
+def _normalize_bundling(
+    *arrays: Union[ArrayLike, "Hypervector"],
+    axis: Union[None, int, Tuple[int, ...]] = None,
+) -> Tuple[ArrayLike, bool, Optional["Hypervector"], Tuple[int, ...]]:
+    """
+    Normalize bundling inputs to a dimension-first batch plus its reduce axes.
+
+    Axis 0 is always the hypervector dimension ``D``; the folded axis(es) are the
+    batch axes:
+
+    - ``bundle(a, b, c)`` with ``(D,)`` vectors      -> ``(D, 3)``, reduce ``(1,)``
+    - ``bundle(batch)`` with a ``(D, N)`` batch      -> ``(D, N)``, reduce ``(1,)``
+    - ``bundle(a, batch)`` mixing the two            -> ``(D, 1 + N)``, reduce ``(1,)``
+    - ``bundle(tensor)`` with a ``(D, N, M)`` batch  -> kept unflattened, reduce the
+      last batch axis ``(2,)`` by default, or an explicit ``axis``
+
+    ``axis`` selects which batch axis(es) collapse (never axis 0). A lone ``(D,)``
+    input accepts only ``axis=None``. Multiple operands must be ``(D,)`` or
+    ``(D, N)`` (an operand with ``ndim >= 3`` raises).
 
     Returns:
-        Tuple of ``(batch, is_torch, reference_hypervector)`` where ``batch`` is a
-        single ``(D, N)`` array.
+        Tuple of ``(batch, is_torch, reference_hypervector, reduce_axes)``.
     """
     data_arrays, is_torch, reference_hv = _normalize_inputs(*arrays)
-    columns = [_as_2d_columns(arr, is_torch) for arr in data_arrays]
+    ndims = [getattr(arr, "ndim", 1) for arr in data_arrays]
+    multi = len(data_arrays) > 1
 
-    if len(columns) == 1:
-        batch = columns[0]
-    elif is_torch:
-        batch = torch.cat(columns, dim=1)
+    if multi and any(nd >= 3 for nd in ndims):
+        raise ValueError(
+            "bundling multiple operands requires (D,) or (D, N) inputs; "
+            "got an operand with ndim >= 3"
+        )
+
+    single_1d = not multi and ndims[0] == 1
+
+    if not multi and ndims[0] >= 3:
+        batch = data_arrays[0]
     else:
-        batch = np.concatenate(columns, axis=1)
+        columns = [_as_2d_columns(arr, is_torch) for arr in data_arrays]
+        if len(columns) == 1:
+            batch = columns[0]
+        elif is_torch:
+            batch = torch.cat(columns, dim=1)
+        else:
+            batch = np.concatenate(columns, axis=1)
 
-    return batch, is_torch, reference_hv
+    if single_1d:
+        if axis is not None:
+            raise ValueError("axis is not valid for a single (D,) hypervector")
+        reduce_axes: Tuple[int, ...] = (1,)
+    else:
+        reduce_axes = _resolve_reduce_axes(batch.ndim, axis)
+
+    return batch, is_torch, reference_hv, reduce_axes
 
 
 def _normalize_binding(
@@ -151,26 +258,25 @@ def _normalize_binding(
 
 
 def _normalize_similarity(
-    *arrays: Union[ArrayLike, "Hypervector"]
+    *arrays: Union[ArrayLike, "Hypervector"], axis: Optional[int] = None
 ) -> Tuple[ArrayLike, ArrayLike, bool, bool]:
     """
-    Normalize similarity inputs to an aligned ``(A, B)`` pair compared column-wise.
+    Normalize similarity inputs to an aligned ``(A, B)`` pair reduced over axis 0.
 
-    Resolves every calling convention to two dimension-first arrays whose columns
-    are compared over axis 0 (broadcasting on axis 1):
+    Reduction is always over axis 0 (the dimension ``D``); the trailing batch axes
+    are aligned by broadcasting:
 
-    - one ``(D, N)`` batch         -> ``A = col 0``, ``B = cols 1..N-1`` (N-1 scores)
-    - two ``(D,)`` vectors         -> one scalar score (``scalar=True``)
-    - two ``(D, N)`` batches       -> N per-column scores
-    - ``(D,)`` and ``(D, N)``      -> the vector broadcast against each column (N scores)
-
-    Args:
-        *arrays: One or two hypervectors / raw arrays.
+    - one ``(D, N)`` batch (``axis=None``)  -> ``A = col 0``, ``B = cols 1..N-1``
+    - one ``(D, N, M, ...)`` batch          -> requires an explicit ``axis``; splits
+      index 0 vs the rest along that axis (the split axis is kept for broadcasting)
+    - two ``(D,)`` vectors                  -> one scalar score (``scalar=True``)
+    - two ``(D, N)`` batches                -> N per-column scores
+    - mixed ranks (e.g. ``(D,)`` vs ``(D, N, M)``) -> lower-rank operand padded with
+      trailing length-1 axes, then broadcast
 
     Returns:
-        Tuple of ``(A, B, is_torch, scalar)``. ``A``/``B`` are dimension-first
-        arrays broadcastable on axis 1; ``scalar`` is True when both inputs were a
-        single 1D vector (the result should be returned as a Python float).
+        Tuple of ``(A, B, is_torch, scalar)``. ``scalar`` is True only when both
+        inputs were a single 1D vector (return the result as a Python float).
     """
     data_arrays, is_torch, _ = _normalize_inputs(*arrays)
 
@@ -180,17 +286,44 @@ def _normalize_similarity(
             raise ValueError(
                 "single-input similarity requires a 2D (D, N) batch of hypervectors"
             )
-        return arr[:, :1], arr[:, 1:], is_torch, False
+        if axis is None:
+            if arr.ndim >= 3:
+                raise ValueError(
+                    "single-input similarity on a (D, N, M, ...) batch requires an "
+                    "explicit axis"
+                )
+            split_axis = 1
+        else:
+            resolved = _resolve_reduce_axes(arr.ndim, axis)
+            if len(resolved) != 1:
+                raise ValueError(
+                    "single-input similarity reduces exactly one batch axis"
+                )
+            split_axis = resolved[0]
+
+        size = arr.shape[split_axis]
+        if is_torch:
+            head = torch.tensor([0], device=arr.device)
+            rest = torch.arange(1, size, device=arr.device)
+            return (
+                arr.index_select(split_axis, head),
+                arr.index_select(split_axis, rest),
+                is_torch,
+                False,
+            )
+        return (
+            np.take(arr, [0], axis=split_axis),
+            np.take(arr, list(range(1, size)), axis=split_axis),
+            is_torch,
+            False,
+        )
 
     if len(data_arrays) == 2:
         a, b = data_arrays[0], data_arrays[1]
-        a_1d = getattr(a, "ndim", 1) == 1
-        b_1d = getattr(b, "ndim", 1) == 1
-        scalar = a_1d and b_1d
-        if a_1d:
-            a = a[:, None]
-        if b_1d:
-            b = b[:, None]
+        scalar = getattr(a, "ndim", 1) == 1 and getattr(b, "ndim", 1) == 1
+        target = 2 if scalar else max(a.ndim, b.ndim)
+        a = _pad_trailing(a, target, is_torch)
+        b = _pad_trailing(b, target, is_torch)
         return a, b, is_torch, scalar
 
     raise ValueError(
@@ -280,7 +413,7 @@ def _detect_batch_structure(
 
         return (True, batch_groups)
 
-    # Case 2: Single list input - check if nested
+    # Case 2: Single list input, check if nested
     if len(arrays) == 1 and isinstance(arrays[0], list):
         lst = arrays[0]
 
@@ -296,7 +429,7 @@ def _detect_batch_structure(
             # Flat list â†’ not batched (bundle together)
             return (False, lst)
 
-    # Case 3: Multiple arguments or single non-list â†’ not batched
+    # Case 3: Multiple arguments or single non-list, not batched
     if len(arrays) == 1:
         return (False, arrays)
     else:

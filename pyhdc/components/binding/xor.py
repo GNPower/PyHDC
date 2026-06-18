@@ -1,4 +1,4 @@
-﻿import numpy as np
+import numpy as np
 
 # Optional PyTorch support
 try:
@@ -9,7 +9,7 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_binding
+from pyhdc.components.input_formatting import _broadcast_operands, _normalize_binding
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -24,7 +24,9 @@ def ExclusiveOr(*hypervectors: ArrayLike) -> ArrayLike:
     XOR binding for binary hypervectors.
 
     Binds binary hypervectors using exclusive OR. Used with Binary Spatter
-    Codes (BSC) and other binary encodings. XOR is its own inverse.
+    Codes (BSC) and other binary encodings. XOR is its own inverse. Operands
+    broadcast over the trailing batch axes (a single key binds against each
+    column of a batch, two batches bind per column).
 
     Args:
         *hypervectors: Variable number of binary hypervectors, or single 2D batch
@@ -39,11 +41,15 @@ def ExclusiveOr(*hypervectors: ArrayLike) -> ArrayLike:
         >>> # result: [0, 1, 1, 0]
     """
     hvs, is_torch, _ = _normalize_binding(*hypervectors)
+    operands = _broadcast_operands(hvs, is_torch)
 
     if is_torch:
-        result = hvs[0].bool()
-        for i in range(1, len(hvs)):
-            result = torch.logical_xor(result, hvs[i].bool())
-        return result.to(hvs[0].dtype)
-    else:
-        return np.logical_xor.reduce(hvs).astype(hvs[0].dtype)
+        result = operands[0].bool()
+        for operand in operands[1:]:
+            result = torch.logical_xor(result, operand.bool())
+        return result.to(operands[0].dtype)
+
+    result = operands[0].astype(bool)
+    for operand in operands[1:]:
+        result = np.logical_xor(result, operand.astype(bool))
+    return result.astype(operands[0].dtype)
