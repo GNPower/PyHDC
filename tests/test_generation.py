@@ -309,7 +309,8 @@ class TestXorshiftGenerators:
 
 
 class TestShiftedCounterGenerator:
-    """ShiftedCounterGenerator is abstract; tests use the concrete FeistelCounterGenerator."""
+    """ShiftedCounterGenerator is abstract, tests use the concrete
+    FeistelCounterGenerator."""
 
     def test_generate_words(self):
         gen = FeistelCounterGenerator(seed=1)

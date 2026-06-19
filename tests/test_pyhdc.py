@@ -26,6 +26,7 @@ def test_encoding_classes_importable():
         "BSDC_CDT",
         "BSDC_S",
         "BSDC_SEG",
+        "BSDC_THIN",
     ]
     for name in names:
         assert hasattr(pyhdc, name), f"Missing encoding: {name}"
@@ -46,7 +47,19 @@ def test_exception_classes_importable():
 
 
 def test_convenience_functions_importable():
-    for name in ["generate", "zeros", "bundle", "bind"]:
+    names = [
+        "generate",
+        "zeros",
+        "bundle",
+        "bind",
+        "unbind",
+        "stack",
+        "permute",
+        "inverse",
+        "negative",
+        "normalize",
+    ]
+    for name in names:
         assert hasattr(pyhdc, name), f"Missing function: {name}"
 
 

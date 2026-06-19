@@ -37,9 +37,9 @@ def SparseSegmented(
     segment.
 
     NOTE: Since s = dimensions * probability is not garunteed to evenly divide into
-    the hypervector dimensions, the segment, s, is rounded up and the final hypervector trimmed.
-    This means the non-zero value in the last segment may be trimmed and not be present in the
-    final hypervector.
+    the hypervector dimensions, the segment, s, is rounded up and the final
+    hypervector trimmed. This means the non-zero value in the last segment may be
+    trimmed and not be present in the final hypervector.
 
     :param dimensions: number of dimensions in the vector
     :type dimensions: int

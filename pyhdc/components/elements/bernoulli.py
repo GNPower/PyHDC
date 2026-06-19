@@ -1,8 +1,8 @@
 import numpy as np
 
 
-def BernoulliBiploar(dimensions: int, dtype: type = np.int32) -> np.ndarray:
-    """BernoulliBiploar X∈Z, X_i ~ B(0.5)*2 - 1
+def BernoulliBipolar(dimensions: int, dtype: type = np.int32) -> np.ndarray:
+    """BernoulliBipolar X∈Z, X_i ~ B(0.5)*2 - 1
 
     Bernoulli distribution of bipolar numbers, either -1 or 1
 

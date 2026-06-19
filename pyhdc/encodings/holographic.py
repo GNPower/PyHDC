@@ -25,6 +25,13 @@ from pyhdc.components.bundling import (
 from pyhdc.components.elements import NormalReal, UniformAngles
 from pyhdc.components.similarity import AngleDistance, CosineSimilarity
 from pyhdc.components.thinning import NoThin
+from pyhdc.components.unary import (
+    L2Normalize,
+    Negate,
+    PhaseNegate,
+    ReverseInverse,
+    WrapPhase,
+)
 from pyhdc.encodings.base import Encoding
 from pyhdc.generation.base import HDCGenerator
 from pyhdc.hypervector import EncodingSpec
@@ -36,14 +43,14 @@ from pyhdc.types import Backend, Device
 
 
 class HRR(Encoding):
-    """
+    r"""
     Holographic Reduced Representation.
 
     Uses circular convolution for binding and normalized bundling.
 
     Args:
         random_choice_range: Optional float (rho). When set, coordinates whose
-            |pre-norm sum| <= rho * sqrt(N) are replaced by independent N(0,1)
+            \|pre-norm sum\| <= rho * sqrt(N) are replaced by independent N(0,1)
             draws before normalization (band randomization).
     """
 
@@ -79,6 +86,9 @@ class HRR(Encoding):
             binding_fn=CircularConvolution,
             unbinding_fn=CircularCorrelation,
             generator_output_type="floats",
+            inverse_fn=ReverseInverse,
+            normalize_fn=L2Normalize,
+            negative_fn=Negate,
         )
 
 
@@ -95,6 +105,9 @@ class HRR_NoNorm(Encoding):
             binding_fn=CircularConvolution,
             unbinding_fn=CircularCorrelation,
             generator_output_type="floats",
+            inverse_fn=ReverseInverse,
+            normalize_fn=L2Normalize,
+            negative_fn=Negate,
         )
 
 
@@ -111,6 +124,9 @@ class HRR_ConstNorm(Encoding):
             binding_fn=CircularConvolution,
             unbinding_fn=CircularCorrelation,
             generator_output_type="floats",
+            inverse_fn=ReverseInverse,
+            normalize_fn=L2Normalize,
+            negative_fn=Negate,
         )
 
 
@@ -158,4 +174,6 @@ class FHRR(Encoding):
             binding_fn=ElementAngleAddition,
             unbinding_fn=ElementAngleSubtraction,
             generator_output_type="floats",
+            inverse_fn=PhaseNegate,
+            normalize_fn=WrapPhase,
         )

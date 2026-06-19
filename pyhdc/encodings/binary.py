@@ -26,6 +26,7 @@ from pyhdc.components.bundling import (
 from pyhdc.components.elements import BernoulliBinary, BernoulliSparse, SparseSegmented
 from pyhdc.components.similarity import HammingDistance, Overlap
 from pyhdc.components.thinning import NoThin
+from pyhdc.components.unary import IdentityInverse
 from pyhdc.encodings.base import Encoding
 from pyhdc.exceptions import RaiseNotImplementedError
 from pyhdc.generation.base import HDCGenerator
@@ -79,6 +80,7 @@ class BSC(Encoding):
             binding_fn=ExclusiveOr,
             unbinding_fn=ExclusiveOr,
             generator_output_type="bits",
+            inverse_fn=IdentityInverse,
         )
 
 

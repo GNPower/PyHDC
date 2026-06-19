@@ -8,12 +8,14 @@ multiple backends (NumPy and PyTorch), custom generators, and recovery methods.
 
 from __future__ import annotations
 
+import numbers
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
 
+from pyhdc.exceptions import RaiseNotImplementedError
 from pyhdc.types import ArrayLike, Backend, Device, GeneratorOutputType
 
 # Use TYPE_CHECKING to avoid circular imports at runtime
@@ -43,6 +45,10 @@ class EncodingSpec:
     unbinding_fn: Callable
     mask: Optional[int] = None
     generator_output_type: GeneratorOutputType = "floats"  # What type of output needed
+    permute_fn: Optional[Callable] = None  # None -> the shared CyclicShift permute
+    inverse_fn: Callable = RaiseNotImplementedError
+    normalize_fn: Callable = RaiseNotImplementedError
+    negative_fn: Callable = RaiseNotImplementedError
 
 
 class BackendManager:
@@ -170,7 +176,10 @@ class Hypervector:
         return self._metadata.copy()  # Return copy to prevent mutation
 
     def __repr__(self) -> str:
-        return f"Hypervector(shape={self.shape}, backend='{self.backend}', encoding={self.encoding.__class__.__name__})"
+        return (
+            f"Hypervector(shape={self.shape}, backend='{self.backend}', "
+            f"encoding={self.encoding.__class__.__name__})"
+        )
 
     def __len__(self) -> int:
         return len(self._data)
@@ -246,7 +255,7 @@ class Hypervector:
         return self.to_torch(device_str)
 
     def similarity(
-        self, other: Optional["Hypervector"] = None
+        self, other: Optional["Hypervector"] = None, *, axis: Optional[int] = None
     ) -> Union[
         float, np.ndarray, "torch.Tensor"
     ]:  # pyright: ignore[reportInvalidTypeForm]
@@ -257,17 +266,22 @@ class Hypervector:
             other: Another hypervector to compare with. If omitted, ``self`` must be
                 a ``(D, N)`` batch and the similarity of column 0 against each
                 remaining column is returned.
+            axis: For a single ``(D, N, M, ...)`` batch (``other`` omitted), the
+                batch axis along which to split column 0 against the rest.
 
         Returns:
             Similarity score(s)
         """
         if other is None:
-            return self._encoding.similarity(self)
+            return self._encoding.similarity(self, axis=axis)
         self._check_compatibility(other)
-        return self._encoding.similarity(self, other)
+        return self._encoding.similarity(self, other, axis=axis)
 
     def bundle(
-        self, *others: "Hypervector", batch_dim: Optional[int] = None
+        self,
+        *others: "Hypervector",
+        axis: Union[None, int, Tuple[int, ...]] = None,
+        batch_dim: Optional[int] = None,
     ) -> "Hypervector":
         """
         Bundle this hypervector with others.
@@ -277,7 +291,10 @@ class Hypervector:
 
         Args:
             *others: Other hypervectors to bundle
-            batch_dim: Passed through to Encoding.bundle (instance methods don't use batching)
+            axis: Batch axis (or axes) to fold when bundling a single batched
+                hypervector (defaults to the last batch axis)
+            batch_dim: Passed through to Encoding.bundle (instance methods don't
+                use batching)
 
         Returns:
             A new bundled hypervector
@@ -286,7 +303,7 @@ class Hypervector:
             self._check_compatibility(other)
 
         # Encoding.bundle now handles Hypervector objects and returns a Hypervector
-        return self._encoding.bundle(self, *others, batch_dim=batch_dim)
+        return self._encoding.bundle(self, *others, axis=axis, batch_dim=batch_dim)
 
     def bind(
         self, *others: "Hypervector", batch_dim: Optional[int] = None
@@ -299,7 +316,8 @@ class Hypervector:
 
         Args:
             *others: Other hypervectors to bind
-            batch_dim: Passed through to Encoding.bind (instance methods don't use batching)
+            batch_dim: Passed through to Encoding.bind (instance methods don't
+                use batching)
 
         Returns:
             A new bound hypervector
@@ -321,7 +339,8 @@ class Hypervector:
 
         Args:
             *others: Other hypervectors to unbind
-            batch_dim: Passed through to Encoding.unbind (instance methods don't use batching)
+            batch_dim: Passed through to Encoding.unbind (instance methods don't
+                use batching)
 
         Returns:
             A new unbound hypervector
@@ -341,6 +360,56 @@ class Hypervector:
         """
         # Encoding.thin now handles Hypervector objects and returns a Hypervector
         return self._encoding.thin(self)
+
+    def permute(self, shift: int = 1) -> "Hypervector":
+        """Permute (cyclic-shift) this hypervector along the dimension axis."""
+        return self._encoding.permute(self, shift=shift)
+
+    def inverse(self) -> "Hypervector":
+        """Return the binding inverse of this hypervector."""
+        return self._encoding.inverse(self)
+
+    def negative(self) -> "Hypervector":
+        """Return the bundling (additive) inverse of this hypervector."""
+        return self._encoding.negative(self)
+
+    def normalize(self) -> "Hypervector":
+        """Normalize this hypervector to its encoding's entry space."""
+        return self._encoding.normalize(self)
+
+    def __add__(self, other: "Hypervector") -> "Hypervector":
+        """``a + b`` bundles the two hypervectors."""
+        if not isinstance(other, Hypervector):
+            return NotImplemented
+        return self.bundle(other)
+
+    def __mul__(self, other: "Hypervector") -> "Hypervector":
+        """``a * b`` binds the two hypervectors."""
+        if not isinstance(other, Hypervector):
+            return NotImplemented
+        return self.bind(other)
+
+    def __truediv__(self, other: "Hypervector") -> "Hypervector":
+        """``a / b`` unbinds ``b`` from ``a``."""
+        if not isinstance(other, Hypervector):
+            return NotImplemented
+        return self.unbind(other)
+
+    def __invert__(self) -> "Hypervector":
+        """``~a`` returns the binding inverse of ``a``."""
+        return self.inverse()
+
+    def __rshift__(self, shift: int) -> "Hypervector":
+        """``a >> k`` permutes ``a`` by ``+k`` positions."""
+        if isinstance(shift, bool) or not isinstance(shift, numbers.Integral):
+            return NotImplemented
+        return self.permute(shift=int(shift))
+
+    def __lshift__(self, shift: int) -> "Hypervector":
+        """``a << k`` permutes ``a`` by ``-k`` positions (inverse of ``>>``)."""
+        if isinstance(shift, bool) or not isinstance(shift, numbers.Integral):
+            return NotImplemented
+        return self.permute(shift=-int(shift))
 
     def _check_compatibility(self, other: "Hypervector") -> None:
         """Check if another hypervector is compatible."""
@@ -420,6 +489,33 @@ def bind(*hypervectors: Hypervector) -> Hypervector:
     if not hypervectors:
         raise ValueError("At least one hypervector required")
     return hypervectors[0].bind(*hypervectors[1:])
+
+
+def unbind(*hypervectors: Hypervector) -> Hypervector:
+    """Unbind hypervectors: ``hypervectors[0]`` unbound from the rest."""
+    if not hypervectors:
+        raise ValueError("At least one hypervector required")
+    return hypervectors[0].unbind(*hypervectors[1:])
+
+
+def permute(hypervector: Hypervector, shift: int = 1) -> Hypervector:
+    """Permute (cyclic-shift) a hypervector along the dimension axis."""
+    return hypervector.permute(shift=shift)
+
+
+def inverse(hypervector: Hypervector) -> Hypervector:
+    """Return the binding inverse of a hypervector."""
+    return hypervector.inverse()
+
+
+def negative(hypervector: Hypervector) -> Hypervector:
+    """Return the bundling (additive) inverse of a hypervector."""
+    return hypervector.negative()
+
+
+def normalize(hypervector: Hypervector) -> Hypervector:
+    """Normalize a hypervector to its encoding's entry space."""
+    return hypervector.normalize()
 
 
 def stack(hypervectors: "list[Hypervector]") -> Hypervector:
