@@ -119,8 +119,8 @@ class TestMAPCSpecific:
         assert abs(sim - 1.0) < 1e-4
 
     def test_bind_unbind_roundtrip(self):
-        """MAP-C unbinding is approximate; paper (Figure 6) shows ~0.7 similarity at D=1024.
-        With DIM=512 we use a conservative threshold of 0.65."""
+        """MAP-C unbinding is approximate, ~0.7 similarity
+        at D=1024. With DIM=512 we use a conservative threshold of 0.65."""
         enc = pyhdc.MAP_C(dimension=DIM)
         hv1 = enc.generate()
         hv2 = enc.generate()
@@ -197,7 +197,8 @@ class TestMAPBSpecific:
         assert unique.issubset({-1, 1})
 
     def test_bind_unbind_exact(self):
-        """MAP-B uses element-wise multiplication which is exactly self-inverse for bipolar."""
+        """MAP-B uses element-wise multiplication which is exactly self-inverse
+        for bipolar."""
         enc = pyhdc.MAP_B(dimension=DIM)
         hv1 = enc.generate()
         hv2 = enc.generate()

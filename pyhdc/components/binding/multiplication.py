@@ -1,4 +1,4 @@
-﻿from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -11,7 +11,11 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
 
-from pyhdc.components.input_formatting import _normalize_binding
+from pyhdc.components.input_formatting import (
+    _broadcast_operands,
+    _normalize_binding,
+    _require_single_vector,
+)
 
 # Type aliases
 from pyhdc.types import ArrayLike
@@ -26,7 +30,9 @@ def ElementMultiplication(*hypervectors: ArrayLike) -> ArrayLike:
     Element-wise multiplication binding.
 
     Binds hypervectors by multiplying corresponding elements. Commonly used
-    with MAP encodings (bipolar values).
+    with MAP encodings (bipolar values). Operands broadcast over the trailing
+    batch axes, so a single ``(D,)`` key binds against every column of a
+    ``(D, N)`` batch, and two ``(D, N)`` batches bind per column.
 
     Args:
         *hypervectors: Variable number of hypervectors to bind, or single 2D batch
@@ -41,11 +47,11 @@ def ElementMultiplication(*hypervectors: ArrayLike) -> ArrayLike:
         >>> # result: [1, -1, -1, 1]
     """
     hvs, is_torch, _ = _normalize_binding(*hypervectors)
-
-    if is_torch:
-        return torch.prod(torch.stack(hvs), dim=0)
-    else:
-        return np.multiply.reduce(hvs)
+    operands = _broadcast_operands(hvs, is_torch)
+    result = operands[0]
+    for operand in operands[1:]:
+        result = result * operand
+    return result
 
 
 # ============================================================================
@@ -65,7 +71,7 @@ def MatrixMultiplication(
     the bound result and the matrices for later unbinding.
 
     Args:
-        *hypervectors: Variable number of hypervectors to bind, or single 2D batch
+        *hypervectors: Variable number of hypervectors to bind (single (D,) each)
         matrices: Optional pre-generated matrices. If None, generates new ones.
         seed: Random seed for reproducible matrix generation
 
@@ -73,9 +79,11 @@ def MatrixMultiplication(
         Tuple of (bound hypervector, list of matrices)
 
     Note:
-        Requires N-1 matrices to bind N hypervectors
+        Requires N-1 matrices to bind N hypervectors. Matrix binding is not
+        batch-safe; use batch_dim= at the Encoding layer to loop over a batch.
     """
     hvs, is_torch, _ = _normalize_binding(*hypervectors)
+    _require_single_vector(hvs, "MatrixMultiplication")
     dim = hvs[0].shape[0]
 
     # Generate or validate matrices
@@ -130,8 +138,12 @@ def InverseMatrixMultiplication(
 
     Returns:
         Unbound hypervector
+
+    Note:
+        Not batch-safe; use batch_dim= at the Encoding layer to loop over a batch.
     """
     hvs, is_torch, _ = _normalize_binding(*hypervectors)
+    _require_single_vector(hvs, "InverseMatrixMultiplication")
 
     if len(matrices) != len(hvs) - 1:
         raise ValueError(

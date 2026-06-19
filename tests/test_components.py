@@ -7,7 +7,7 @@ from pyhdc.components.binding.multiplication import ElementMultiplication
 from pyhdc.components.binding.xor import ExclusiveOr
 from pyhdc.components.bundling.addition import ElementAddition
 from pyhdc.components.bundling.binary import Disjunction, DisjunctionThinned
-from pyhdc.components.elements.bernoulli import BernoulliBinary, BernoulliBiploar
+from pyhdc.components.elements.bernoulli import BernoulliBinary, BernoulliBipolar
 from pyhdc.components.similarity.angle import AngleDistance
 from pyhdc.components.similarity.cosine import CosineSimilarity
 from pyhdc.components.similarity.hamming import HammingDistance
@@ -206,16 +206,16 @@ class TestBernoulliElements:
         assert 0.4 < fraction < 0.6
 
     def test_bernoulli_bipolar_values_in_minus_one_one(self):
-        result = BernoulliBiploar(DIM, np.int32)
+        result = BernoulliBipolar(DIM, np.int32)
         unique = set(np.unique(result))
         assert unique.issubset({-1, 1})
 
     def test_bernoulli_bipolar_correct_length(self):
-        result = BernoulliBiploar(DIM, np.int32)
+        result = BernoulliBipolar(DIM, np.int32)
         assert len(result) == DIM
 
     def test_bernoulli_bipolar_approximately_balanced(self):
-        result = BernoulliBiploar(10000, np.int32)
+        result = BernoulliBipolar(10000, np.int32)
         fraction_pos = np.mean(result == 1)
         assert 0.4 < fraction_pos < 0.6
 
