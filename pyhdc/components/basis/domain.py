@@ -29,10 +29,10 @@ from pyhdc.components.elements import (
 #   UniformAngles  -> FHRR             (complex/phase)
 #   NormalReal     -> HRR, HRR_NoNorm, HRR_ConstNorm, VTB, MBAT (real-continuous)
 _ENDPOINTS = {
-    BernoulliBipolar: (-1, 1), # MAP_I, MAP_I_Bits, MAP_B
-    BernoulliBinary: (0, 1),   # BSC
-    BernoulliSparse: (0, 1),   # BSDC_CDT, BSDC_S, BSDC_THIN
-    SparseSegmented: (0, 1),   # BSDC_SEG
+    BernoulliBipolar: (-1, 1),  # MAP_I, MAP_I_Bits, MAP_B
+    BernoulliBinary: (0, 1),  # BSC
+    BernoulliSparse: (0, 1),  # BSDC_CDT, BSDC_S, BSDC_THIN
+    SparseSegmented: (0, 1),  # BSDC_SEG
 }
 
 

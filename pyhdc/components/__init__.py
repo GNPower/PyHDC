@@ -7,18 +7,9 @@ from pyhdc.components import (
     binding,
     bundling,
     elements,
-    ridealongs,
+    quantization,
     similarity,
     thinning,
-)
-from pyhdc.components.ridealongs import (
-    hard_quantize,
-    multibind,
-    multibundle,
-    multirandsel,
-    multiset,
-    randsel,
-    soft_quantize,
 )
 
 # Define what gets exported with "from pyhdc.components import *"
@@ -28,14 +19,6 @@ __all__ = [
     "bundling",
     "similarity",
     "elements",
-    "ridealongs",
+    "quantization",
     "thinning",
-    # C4-C6 ride-along callables
-    "randsel",
-    "multirandsel",
-    "multiset",
-    "multibundle",
-    "multibind",
-    "hard_quantize",
-    "soft_quantize",
 ]
