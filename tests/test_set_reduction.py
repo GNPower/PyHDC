@@ -1,18 +1,11 @@
-"""Tests for the C4-C6 ride-along components (pyhdc.components.ridealongs)."""
+"""Tests for set-reduction components: random-selection bundling and multiset/multibind."""
 
 import numpy as np
 import pytest
 
 import pyhdc
-from pyhdc.components import (
-    hard_quantize,
-    multibind,
-    multibundle,
-    multirandsel,
-    multiset,
-    randsel,
-    soft_quantize,
-)
+from pyhdc.components.binding import multibind
+from pyhdc.components.bundling import multibundle, multirandsel, multiset, randsel
 
 D, N = 8, 5
 
@@ -32,8 +25,8 @@ def test_randsel_weighted():
 
 
 def test_randsel_weights_need_not_sum_to_one():
-    # Weights are normalized internally, so un-normalized weights work (and match
-    # the torch backend, which auto-normalizes via multinomial).
+    # Weights are normalized internally, so un-normalized weights work (and match the
+    # torch backend, which auto-normalizes via multinomial).
     data = np.arange(D * N).reshape(D, N)
     out = randsel(data, p=[0, 0, 0, 0, 5.0])  # sums to 5, all mass on last column
     assert np.array_equal(out, data[:, -1])
@@ -54,15 +47,8 @@ def test_multibind_is_prod():
     assert np.array_equal(multibind(data), data.prod(axis=-1))
 
 
-def test_quantize():
-    x = np.array([-2.0, 0.0, 3.0])
-    assert np.array_equal(hard_quantize(x), np.array([-1.0, 0.0, 1.0]))
-    assert np.allclose(soft_quantize(x), np.tanh(x))
-    assert np.allclose(soft_quantize(x, temperature=2.0), np.tanh(x / 2.0))
-
-
 @pytest.mark.skipif(not pyhdc.TORCH_AVAILABLE, reason="PyTorch not installed")
-def test_ridealongs_torch():
+def test_set_reduction_torch():
     import torch
 
     data = torch.arange(D * N).reshape(D, N)
@@ -71,6 +57,3 @@ def test_ridealongs_torch():
     assert torch.equal(multiset(data), data.sum(dim=-1))
     bip = torch.tensor(np.random.choice([-1, 1], size=(D, N)))
     assert torch.equal(multibind(bip), bip.prod(dim=-1))
-    assert torch.equal(
-        hard_quantize(torch.tensor([-2.0, 0.0, 3.0])), torch.tensor([-1.0, 0.0, 1.0])
-    )
