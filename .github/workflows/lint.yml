@@ -6,6 +6,13 @@ on:
         branches:
             - main
             - dev
+    workflow_call:
+        inputs:
+            skip_auto_commit:
+                description: "Set to 'true' to skip the lint auto-commit step (used by the release gate)."
+                type: string
+                required: false
+                default: ""
 
 name: Static Analysis and Linting
 
@@ -52,6 +59,7 @@ jobs:
                 mypy pyhdc --ignore-missing-imports
               continue-on-error: true
             - name: Git Auto Commit
+              if: ${{ inputs.skip_auto_commit != 'true' }}
               uses: stefanzweifel/git-auto-commit-action@v5
               with:
                 commit_message: Static Analysis & Linting Changes

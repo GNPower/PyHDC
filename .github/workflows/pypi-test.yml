@@ -1,10 +1,15 @@
-name: Publish to TestPyPI
+name: TestPyPI Release Gate
 
+# Builds the package, publishes it to TestPyPI, then runs the lint, install, and
+# test workflows against the *installed* TestPyPI artifact (not the source tree).
+# This catches packaging problems (a module excluded from the build, a missing
+# data file, broken metadata) that source-tree CI cannot see.
 on:
+    pull_request:
+        branches: [main]
     workflow_dispatch:
 
 permissions:
-    id-token: write
     contents: read
 
 env:
@@ -13,25 +18,42 @@ env:
 jobs:
     build:
         runs-on: ubuntu-latest
+        name: Build distribution
+        outputs:
+            version: ${{ steps.version.outputs.version }}
         steps:
             - uses: actions/checkout@v4
             - name: Set up Python
               uses: actions/setup-python@v5
               with:
                   python-version: "3.11"
+            # TestPyPI rejects a version it already has, so stamp a unique dev
+            # version derived from the run number before building.
+            - name: Compute a unique dev version
+              id: version
+              shell: bash
+              run: |
+                BASE=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/version = "([^"]*)"/\1/')
+                DEV="${BASE}.dev${{ github.run_number }}"
+                sed -i -E "s/^version = \"[^\"]*\"/version = \"${DEV}\"/" pyproject.toml
+                echo "version=${DEV}" >> "$GITHUB_OUTPUT"
+                echo "Building TestPyPI version ${DEV}"
             - name: Install build tools
-              run: pip install build
-            - name: Build package
+              run: |
+                  python -m pip install --upgrade pip
+                  pip install build
+            - name: Build wheel and sdist
               run: python -m build
             - name: Store distribution artifacts
               uses: actions/upload-artifact@v4
               with:
-                  name: python-package-distributions
+                  name: testpypi-dist
                   path: dist/
 
-    publish-test:
+    publish-testpypi:
         needs: build
         runs-on: ubuntu-latest
+        name: Publish to TestPyPI
         environment:
             name: testpypi
             url: https://test.pypi.org/p/PyHDC
@@ -41,9 +63,29 @@ jobs:
             - name: Download distributions
               uses: actions/download-artifact@v4
               with:
-                  name: python-package-distributions
+                  name: testpypi-dist
                   path: dist/
             - name: Publish to TestPyPI
               uses: pypa/gh-action-pypi-publish@release/v1
               with:
                   repository-url: https://test.pypi.org/legacy/
+                  skip-existing: true
+
+    # Run the real CI workflows against the published TestPyPI artifact.
+    lint:
+        needs: [build, publish-testpypi]
+        uses: ./.github/workflows/lint.yml
+        with:
+            skip_auto_commit: "true"
+
+    install:
+        needs: [build, publish-testpypi]
+        uses: ./.github/workflows/install.yml
+        with:
+            test_pypi_version: ${{ needs.build.outputs.version }}
+
+    test:
+        needs: [build, publish-testpypi]
+        uses: ./.github/workflows/test.yml
+        with:
+            test_pypi_version: ${{ needs.build.outputs.version }}

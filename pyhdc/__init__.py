@@ -37,11 +37,13 @@ Advanced Usage:
 """
 
 # Version information
-__version__ = "2.2.0"
+__version__ = "2.2.1"
 __author__ = "GNPower"
 
 # Submodules are available for direct import
-from pyhdc import components, encoders, generation, recovery
+# Note: pyhdc.recovery is excluded from the built package (see pyproject.toml
+# [tool.setuptools.packages.find] exclude), so it must not be imported here.
+from pyhdc import components, encoders, generation
 
 # Global backend/device preferences
 from pyhdc.config import (
@@ -199,5 +201,4 @@ __all__ = [
     "components",
     "encoders",
     "generation",
-    "recovery",
 ]

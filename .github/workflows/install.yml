@@ -6,6 +6,13 @@ on:
         branches:
             - main
             - dev
+    workflow_call:
+        inputs:
+            test_pypi_version:
+                description: "Version to install from TestPyPI. If empty, build and install from the source tree."
+                type: string
+                required: false
+                default: ""
 
 name: Install
 
@@ -29,10 +36,40 @@ jobs:
               uses: actions/setup-python@v5
               with:
                   python-version: ${{ matrix.python-version }}
-            - name: Install package
+
+            # Source mode (push / PR): build and install the working tree.
+            - name: Install from source
+              if: ${{ inputs.test_pypi_version == '' }}
               run: |
                 python -m pip install --upgrade pip
                 pip install -r requirements.txt
                 pip install .
-            - name: Test import
-              run: python -c "import pyhdc; print('pyhdc import successful')"
+
+            # Release-gate mode: install the published artifact from TestPyPI
+            # (deps come from real PyPI, retry while the index propagates).
+            - name: Install from TestPyPI
+              if: ${{ inputs.test_pypi_version != '' }}
+              shell: bash
+              run: |
+                python -m pip install --upgrade pip
+                for i in $(seq 1 10); do
+                  if pip install \
+                      --index-url https://test.pypi.org/simple/ \
+                      --extra-index-url https://pypi.org/simple/ \
+                      "pyhdc==${{ inputs.test_pypi_version }}"; then
+                    echo "Installed pyhdc==${{ inputs.test_pypi_version }} from TestPyPI"
+                    exit 0
+                  fi
+                  echo "Attempt $i failed (TestPyPI may still be propagating); retrying in 15s..."
+                  sleep 15
+                done
+                echo "Failed to install pyhdc==${{ inputs.test_pypi_version }} from TestPyPI after 10 attempts"
+                exit 1
+
+            # Import from a directory with no in-tree pyhdc/, so the installed
+            # package is exercised and a module missing from the build fails here.
+            - name: Test import (installed package, not the source tree)
+              shell: bash
+              run: |
+                cd "$RUNNER_TEMP"
+                python -c "import pyhdc; print('pyhdc import successful', pyhdc.__version__)"

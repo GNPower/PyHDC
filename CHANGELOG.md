@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-06-28
+
+### Fixed
+
+- `import pyhdc` failed on an installed build. The top-level `__init__` imported
+  the `pyhdc.recovery` submodule, which is excluded from the built distribution
+  (`pyproject.toml` `[tool.setuptools.packages.find]` `exclude`). The wheel and
+  sdist therefore shipped without it, so `import pyhdc` raised `ImportError` for
+  every installed user. The unused submodule import (and its `__all__` entry) is
+  removed, the recovery exceptions in `pyhdc.exceptions` are unchanged.
+- The `Install` CI workflow now runs its import smoke test from outside the source
+  checkout, so a module missing from the built package is caught instead of being
+  shadowed by the in-tree `pyhdc/` source directory.
+
 ## [2.2.0] - 2026-06-27
 
 ### Added
@@ -446,7 +460,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyproject.toml` with setuptools build configuration
 - GitHub Actions CI: lint, test, PyPI publish workflows
 
-[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.2.1...HEAD
+[2.2.1]: https://github.com/GNPower/PyHDC/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/GNPower/PyHDC/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/GNPower/PyHDC/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/GNPower/PyHDC/compare/v1.1.0...v2.0.0
