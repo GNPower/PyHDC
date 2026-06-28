@@ -37,11 +37,11 @@ Advanced Usage:
 """
 
 # Version information
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 __author__ = "GNPower"
 
 # Submodules are available for direct import
-from pyhdc import components
+from pyhdc import components, encoders, generation, recovery
 
 # Global backend/device preferences
 from pyhdc.config import (
@@ -51,6 +51,19 @@ from pyhdc.config import (
     prefer_cuda,
     prefer_numpy,
     prefer_torch,
+)
+from pyhdc.encoders import (
+    Circular,
+    Density,
+    Empty,
+    Encoder,
+    FractionalPower,
+    Identity,
+    Level,
+    Projection,
+    Random,
+    Sinusoid,
+    Thermometer,
 )
 
 # Encodings from encodings module
@@ -100,6 +113,7 @@ from pyhdc.hypervector import (
     negative,
     normalize,
     permute,
+    similarity,
     stack,
     unbind,
     zeros,
@@ -116,6 +130,7 @@ __all__ = [
     # Core classes
     "Hypervector",
     "Encoding",
+    "Encoder",
     "HDCGenerator",
     "DefaultGenerator",
     "BackendManager",
@@ -138,6 +153,17 @@ __all__ = [
     "BSDC_SEG",
     "BSDC_THIN",
     "FHRR",
+    # Data encoders
+    "Empty",
+    "Identity",
+    "Random",
+    "Level",
+    "Thermometer",
+    "Circular",
+    "Projection",
+    "Sinusoid",
+    "Density",
+    "FractionalPower",
     # Convenience functions
     "generate",
     "zeros",
@@ -149,6 +175,7 @@ __all__ = [
     "inverse",
     "negative",
     "normalize",
+    "similarity",
     # Global backend/device preferences
     "prefer_torch",
     "prefer_cuda",
@@ -170,6 +197,7 @@ __all__ = [
     "Device",
     # Submodules
     "components",
+    "encoders",
     "generation",
     "recovery",
 ]
