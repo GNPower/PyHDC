@@ -5,7 +5,222 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.2.0] - 2026-06-27
+
+### Added
+
+- Data encoders in the new `pyhdc.encoders` package. Each wraps an `Encoding`
+  instance and maps a value, feature vector, or batch to a dimension-first
+  `(D, B)` Hypervector via `encode` (or calling the encoder directly). Codebook
+  encoders: `Empty`, `Identity`, `Random`, `Level`, `Thermometer`, `Circular`.
+  Functional encoders: `Projection`, `Sinusoid`, `Density`, `FractionalPower`.
+  Family-specific encoders raise `NotImplementedError` where the family has no
+  definition (`Identity` on VTB/MBAT/BSDC, Thermometer/Density on continuous or
+  phase families, Projection on BSC/BSDC, FractionalPower outside FHRR and the HRR
+  family). `Identity` returns the binding-identity element (the `e` where
+  `bind(x, e) == x`): all-ones for MAP, all-zeros for BSC, the impulse for the HRR
+  family, zero phase for FHRR.
+- Family-aware basis builders in the new `pyhdc.components.basis` package:
+  `empty`, `identity`, `random`, `level`, `circular`, `thermometer`, plus
+  `family_endpoints`. Each returns a `(D, count)` codebook in the encoding's value
+  domain and backend.
+- Cross similarity. `similarity(A, B, mode="cross")` with `A=(D, P)` and
+  `B=(D, M)` returns the full `(P, M)` matrix of every column of A against every
+  column of B, backed by a single matmul with no `(D, P, M)` intermediate.
+  Available on `Encoding.similarity`, `Hypervector.similarity`, and the new
+  module-level `pyhdc.similarity`. Implemented for Cosine, Hamming, Overlap, and
+  Angle. An encoding whose metric is outside that set raises `NotImplementedError`
+  so the caller can fall back to a per-pair loop. Binary metrics cast to float64
+  for a BLAS matmul, cosine guards a zero-norm column (scores 0, not nan).
+- Module-level convenience function `pyhdc.similarity`.
+- Composable component helpers, each in an operation-named module: random-selection
+  bundling `randsel` / `multirandsel` and additive `multiset` / `multibundle` in
+  `pyhdc.components.bundling`, multiplicative `multibind` in `pyhdc.components.binding`,
+  and `hard_quantize` / `soft_quantize` in `pyhdc.components.quantization`.
+- `MAP_I_Bits` gains a `bit_width` parameter to set the signed saturation width
+  explicitly (overrides `mask`).
+
+### Fixed
+
+- `Encoding.zeros` now works on the torch backend. It previously passed the
+  encoding's numpy dtype straight to `torch.zeros`, which raised a `TypeError`. It
+  now builds in numpy and converts, preserving the dtype.
+- `MAP_I_Bits` now honors its bit width. The post-bundle saturation bounds and the
+  storage dtype are derived from `mask` (which must be `2**k - 1`) or the new
+  `bit_width`, instead of being hard-coded to int32 with the `mask` ignored. The
+  default `mask=(2**32) - 1` is unchanged (int32 bounds, int32 storage). A narrow
+  width now saturates correctly (an 8-bit mask clips to `[-128, 127]` and stores
+  int8), a width wider than 32 widens the storage dtype (up to int64) so the sum
+  no longer wraps on cast.
+
+### Changed
+
+- **Breaking (narrow):** `MAP_I_Bits` rejects a `mask` that is not of the form
+  `2**k - 1` (contiguous low bits). Such a value was previously accepted and
+  silently ignored (always clipping at int32). It now raises `ValueError`. Pass
+  `bit_width=k` for an explicit k-bit limit. Default construction is unaffected.
+
+## [2.1.0] - 2026-06-18
+
+### Added
+
+- Multi-dimensional `(D, N, M)` batches. `generate(size=(D, N, M, ...))` builds a
+  dimension-first tensor where axis 0 is always the hypervector dimension and the
+  trailing axes are the batch.
+- `axis=` on `bundle` and `similarity`. `bundle(batch, axis=k)` folds a chosen
+  batch axis (defaults to the last one, so `(D, N)` still collapses to `(D,)` and
+  `(D, N, M)` collapses to `(D, N)`); a tuple of axes is supported for the additive
+  bundlers. `similarity(batch, axis=k)` splits index 0 vs the rest along axis `k`
+  for a `(D, N, M, ...)` batch. Axis 0 is never a legal reduce axis.
+- `bind` and `unbind` batch automatically. The element-wise binders (MAP
+  multiply, BSC xor, FHRR angle add/sub) broadcast a batch natively (a single
+  `(D,)` key binds against every column; mixed ranks align by trailing-axis
+  broadcasting); every other binder (convolution, shifting, matrix, VTB, CDT) is
+  applied per column internally. A batched `bind(A, B)` returns one batched
+  `(D, N)` Hypervector without `batch_dim`.
+- Two-input `similarity` broadcasts over trailing axes, so `(D, N)` vs
+  `(D, N, M)` returns an `(N, M)` score array.
+- First-class `permute` (cyclic shift along the dimension axis), `inverse`
+  (binding inverse), `negative` (bundling inverse), and `normalize`, available on
+  `Encoding`, on `Hypervector`, and as module-level functions. `permute` works
+  for every encoding; `inverse`/`negative`/`normalize` are defined per family and
+  raise `NotImplementedError` where the algebra has none (e.g. MAP_C inverse, BSC
+  normalize).
+- Operator overloading on `Hypervector`: `+` (bundle), `*` (bind), `/` (unbind),
+  `~` (inverse), `>>`/`<<` (permute by `+`/`-k`). Operators dispatch to the
+  encoding, so they stay per-family correct; a non-hypervector operand yields a
+  standard `TypeError`.
+- Module-level `unbind`, `permute`, `inverse`, `negative`, `normalize` to match
+  the existing `bundle`/`bind` convenience functions.
+- `BSDC_THIN` is now exported from the top-level package (it was previously only
+  reachable via `pyhdc.encodings`).
+
+### Changed
+
+- **Breaking:** the misspelled `BernoulliBiploar` element generator is renamed to
+  `BernoulliBipolar`. `pyhdc.components.elements.BernoulliBiploar` is no longer
+  importable; update any direct import to the corrected name. Element generators
+  are low-level internals, and the public encodings that use it (`MAP_I`,
+  `MAP_I_Bits`, `MAP_B`) are unchanged.
+- Batched generation has a vectorized fast path for the i.i.d. element generators
+  (bipolar/binary/uniform/normal/sparse): the whole batch is drawn in one
+  `(D, *batch)` call. It is reproducible under a fixed seed for a given shape but
+  is no longer value-identical to generating the vectors one at a time. Dropping
+  that cross-consistency guarantee removes a full-array transpose copy (about
+  10-24% faster than the prior order-preserving draw). Ordered/custom generators
+  and `SparseSegmented` keep the per-vector loop and still match their sequential
+  output.
+- Non-batch-safe binders (circular convolution/correlation, shifting, segment
+  shifting, matrix binding, VTB, context-dependent thinning) are applied per
+  column when `bind`/`unbind` receives a batch, returning one batched result.
+  (They previously produced a wrong result silently; 2.0 single-vector inputs are
+  unaffected.)
+- Randomized-bundling metadata `random_zone_count` is a Python `int` for a `(D,)`
+  result (unchanged) and a per-output-vector count array for a batched result.
+- `ElementAdditionBits` (MAP_I_Bits bundling) sums in a wide (int64) accumulator
+  and clips the total once, saturating at the bounds. This replaces the previous
+  per-addition saturating clip, so results change when the running sum would have
+  saturated mid-accumulation; it is vectorized (no Python loop) and supports a
+  tuple of axes.
+- `DisjunctionThinned` (BSDC_THIN bundling) thins a batched result without a
+  per-column Python loop: each surviving column keeps a uniformly random
+  `ceil(D * density)`-subset of its set bits via a vectorized random-key
+  selection.
+- `bundle(array, batch_dim=k)` on a 3D array no longer Python-loops over the
+  split slices: it reduces the other batch axis in one vectorized op and splits
+  the result into the same list of hypervectors (about 8x faster on a
+  1000x20x500 array). Ragged nested-list inputs, `batch_dim=0`, and 4D+ arrays
+  keep the per-group path. For tie-randomizing bundlers the random values at tie
+  coordinates now differ from the previous per-group draws (still random;
+  `batch_dim` has no fixed-seed guarantee). `axis=` remains the preferred
+  vectorized form (returns a single tensor instead of a list).
+
+### Deprecated
+
+- `batch_dim` on `bundle`/`bind`/`unbind` is deprecated and will be removed in a
+  future release. Pass a batched array directly (operations batch automatically)
+  or use `axis=` on `bundle`. Passing `batch_dim` now emits a `DeprecationWarning`.
+
+## [2.1.0] - 2026-06-18
+
+### Added
+
+- Multi-dimensional `(D, N, M)` batches. `generate(size=(D, N, M, ...))` builds a
+  dimension-first tensor where axis 0 is always the hypervector dimension and the
+  trailing axes are the batch.
+- `axis=` on `bundle` and `similarity`. `bundle(batch, axis=k)` folds a chosen
+  batch axis (defaults to the last one, so `(D, N)` still collapses to `(D,)` and
+  `(D, N, M)` collapses to `(D, N)`); a tuple of axes is supported for the additive
+  bundlers. `similarity(batch, axis=k)` splits index 0 vs the rest along axis `k`
+  for a `(D, N, M, ...)` batch. Axis 0 is never a legal reduce axis.
+- `bind` and `unbind` batch automatically. The element-wise binders (MAP
+  multiply, BSC xor, FHRR angle add/sub) broadcast a batch natively (a single
+  `(D,)` key binds against every column; mixed ranks align by trailing-axis
+  broadcasting); every other binder (convolution, shifting, matrix, VTB, CDT) is
+  applied per column internally. A batched `bind(A, B)` returns one batched
+  `(D, N)` Hypervector without `batch_dim`.
+- Two-input `similarity` broadcasts over trailing axes, so `(D, N)` vs
+  `(D, N, M)` returns an `(N, M)` score array.
+- First-class `permute` (cyclic shift along the dimension axis), `inverse`
+  (binding inverse), `negative` (bundling inverse), and `normalize`, available on
+  `Encoding`, on `Hypervector`, and as module-level functions. `permute` works
+  for every encoding; `inverse`/`negative`/`normalize` are defined per family and
+  raise `NotImplementedError` where the algebra has none (e.g. MAP_C inverse, BSC
+  normalize).
+- Operator overloading on `Hypervector`: `+` (bundle), `*` (bind), `/` (unbind),
+  `~` (inverse), `>>`/`<<` (permute by `+`/`-k`). Operators dispatch to the
+  encoding, so they stay per-family correct; a non-hypervector operand yields a
+  standard `TypeError`.
+- Module-level `unbind`, `permute`, `inverse`, `negative`, `normalize` to match
+  the existing `bundle`/`bind` convenience functions.
+- `BSDC_THIN` is now exported from the top-level package (it was previously only
+  reachable via `pyhdc.encodings`).
+
+### Changed
+
+- **Breaking:** the misspelled `BernoulliBiploar` element generator is renamed to
+  `BernoulliBipolar`. `pyhdc.components.elements.BernoulliBiploar` is no longer
+  importable; update any direct import to the corrected name. Element generators
+  are low-level internals, and the public encodings that use it (`MAP_I`,
+  `MAP_I_Bits`, `MAP_B`) are unchanged.
+- Batched generation has a vectorized fast path for the i.i.d. element generators
+  (bipolar/binary/uniform/normal/sparse): the whole batch is drawn in one
+  `(D, *batch)` call. It is reproducible under a fixed seed for a given shape but
+  is no longer value-identical to generating the vectors one at a time. Dropping
+  that cross-consistency guarantee removes a full-array transpose copy (about
+  10-24% faster than the prior order-preserving draw). Ordered/custom generators
+  and `SparseSegmented` keep the per-vector loop and still match their sequential
+  output.
+- Non-batch-safe binders (circular convolution/correlation, shifting, segment
+  shifting, matrix binding, VTB, context-dependent thinning) are applied per
+  column when `bind`/`unbind` receives a batch, returning one batched result.
+  (They previously produced a wrong result silently; 2.0 single-vector inputs are
+  unaffected.)
+- Randomized-bundling metadata `random_zone_count` is a Python `int` for a `(D,)`
+  result (unchanged) and a per-output-vector count array for a batched result.
+- `ElementAdditionBits` (MAP_I_Bits bundling) sums in a wide (int64) accumulator
+  and clips the total once, saturating at the bounds. This replaces the previous
+  per-addition saturating clip, so results change when the running sum would have
+  saturated mid-accumulation; it is vectorized (no Python loop) and supports a
+  tuple of axes.
+- `DisjunctionThinned` (BSDC_THIN bundling) thins a batched result without a
+  per-column Python loop: each surviving column keeps a uniformly random
+  `ceil(D * density)`-subset of its set bits via a vectorized random-key
+  selection.
+- `bundle(array, batch_dim=k)` on a 3D array no longer Python-loops over the
+  split slices: it reduces the other batch axis in one vectorized op and splits
+  the result into the same list of hypervectors (about 8x faster on a
+  1000x20x500 array). Ragged nested-list inputs, `batch_dim=0`, and 4D+ arrays
+  keep the per-group path. For tie-randomizing bundlers the random values at tie
+  coordinates now differ from the previous per-group draws (still random;
+  `batch_dim` has no fixed-seed guarantee). `axis=` remains the preferred
+  vectorized form (returns a single tensor instead of a list).
+
+### Deprecated
+
+- `batch_dim` on `bundle`/`bind`/`unbind` is deprecated and will be removed in a
+  future release. Pass a batched array directly (operations batch automatically)
+  or use `axis=` on `bundle`. Passing `batch_dim` now emits a `DeprecationWarning`.
 
 ## [2.1.0] - 2026-06-18
 
@@ -231,7 +446,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyproject.toml` with setuptools build configuration
 - GitHub Actions CI: lint, test, PyPI publish workflows
 
-[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/GNPower/PyHDC/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/GNPower/PyHDC/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/GNPower/PyHDC/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/GNPower/PyHDC/compare/v1.0.1...v1.1.0

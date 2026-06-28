@@ -6,7 +6,7 @@ HDC-compatible wrapper for MAP encodings.
 """
 
 from functools import partial
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Tuple
 
 import numpy as np
 
@@ -132,11 +132,78 @@ class MAP_I(Encoding):
         )
 
 
+# Smallest signed numpy int dtype able to store a k-bit signed value, in order.
+_SIGNED_INT_DTYPES = ((8, np.int8), (16, np.int16), (32, np.int32), (64, np.int64))
+
+
+def _bits_from_mask(mask: Optional[int], bit_width: Optional[int] = None) -> int:
+    """Resolve the effective signed bit width ``k`` from a mask or explicit width.
+
+    An explicit ``bit_width`` wins. Otherwise the mask must be a contiguous
+    low-bits value ``2**k - 1`` (so its bit length is ``k``), other masks raise and
+    point the caller to ``bit_width``. The default ``mask=(2**32) - 1`` resolves to
+    ``k = 32``.
+    """
+    if bit_width is not None:
+        k = int(bit_width)
+        if k < 1:
+            raise ValueError(f"bit_width must be >= 1, got {bit_width}")
+        if k > 64:
+            raise ValueError(f"bit_width must be <= 64, got {bit_width}")
+        return k
+    if mask is None:
+        raise ValueError("MAP_I_Bits requires a mask or bit_width")
+    m = int(mask)
+    if m < 1:
+        raise ValueError(f"mask must be a positive 2**k - 1 value, got {mask}")
+    if (m & (m + 1)) != 0:
+        raise ValueError(
+            f"mask must have the form 2**k - 1 (contiguous set bits); got {mask}. "
+            "Pass bit_width=k for an explicit k-bit limit instead."
+        )
+    return m.bit_length()  # equals popcount for a 2**k - 1 mask
+
+
+def _signed_bounds(k: int) -> Tuple[int, int]:
+    """Signed two's-complement range for ``k`` bits: ``[-2**(k-1), 2**(k-1) - 1]``.
+
+    For ``k = 32`` this is exactly ``(np.iinfo(np.int32).min, np.iinfo(np.int32).max)``.
+    ``k = 1`` gives ``(-1, 0)`` (the signed 1-bit range, not bipolar ``{-1, 1}``).
+    """
+    return -(2 ** (k - 1)), (2 ** (k - 1)) - 1
+
+
+def _storage_dtype(k: int):
+    """Smallest signed numpy int dtype that holds a ``k``-bit signed value."""
+    for bits, dtype in _SIGNED_INT_DTYPES:
+        if k <= bits:
+            return dtype
+    raise ValueError(
+        f"bit width k={k} exceeds the 64-bit signed storage ceiling; "
+        "use a mask/bit_width of at most 64 bits."
+    )
+
+
 class MAP_I_Bits(Encoding):
     """
     Multiply-Add-Permute encoding with bit-limited integer values.
 
-    Similar to MAP_I but with configurable bit limits via mask parameter.
+    Like MAP_I, but the post-bundle sum saturates to a configurable signed bit
+    width instead of growing unbounded. The width is taken from ``bit_width`` if
+    given, else from ``mask`` (which must have the form ``2**k - 1``), and the
+    storage dtype is widened to fit it (int8/int16/int32/int64). The default
+    ``mask=(2**32) - 1`` keeps the historical int32 saturation exactly.
+
+    Binding (``bind``/``unbind``, element-wise multiply) is defined on bipolar
+    ``{-1, +1}`` operands, where the product stays bipolar. Binding *bundled*
+    (saturated, non-bipolar) vectors at a narrow width can overflow the storage
+    dtype and wrap, since the multiply is not re-clipped. Bind before bundling, or
+    use a wider ``bit_width`` (or the default int32), if you need to bind sums.
+
+    Args:
+        mask: A ``2**k - 1`` value selecting the k-bit saturation width
+            (default ``(2**32) - 1``, i.e. int32).
+        bit_width: Explicit signed bit width ``k``, overrides ``mask`` when set.
     """
 
     def __init__(
@@ -146,22 +213,22 @@ class MAP_I_Bits(Encoding):
         device: Optional[Device] = None,
         dtype: Optional[Any] = None,
         mask: int = (2**32) - 1,
+        bit_width: Optional[int] = None,
         generator: Optional[HDCGenerator] = None,
         similarity_remap: Optional[Callable] = None,
     ) -> None:
         self._mask = mask
+        self._bit_width = bit_width
         super().__init__(
             dimension, backend, device, dtype, mask, generator, similarity_remap
         )
 
     def _get_encoding_spec(self) -> EncodingSpec:
-        bundling_fn = partial(
-            ElementAdditionBits,
-            min_val=np.iinfo(np.int32).min,
-            max_val=np.iinfo(np.int32).max,
-        )
+        k = _bits_from_mask(self._mask, self._bit_width)
+        min_val, max_val = _signed_bounds(k)
+        bundling_fn = partial(ElementAdditionBits, min_val=min_val, max_val=max_val)
         return EncodingSpec(
-            dtype=np.int32,
+            dtype=_storage_dtype(k),
             element_generator=BernoulliBipolar,
             similarity_fn=CosineSimilarity,
             bundling_fn=bundling_fn,

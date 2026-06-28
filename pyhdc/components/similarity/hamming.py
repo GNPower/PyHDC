@@ -14,7 +14,9 @@ from pyhdc.components.input_formatting import _normalize_similarity
 from pyhdc.types import ArrayLike
 
 
-def HammingDistance(*hypervectors: ArrayLike, axis: Optional[int] = None):
+def HammingDistance(
+    *hypervectors: ArrayLike, axis: Optional[int] = None, mode: str = "pairwise"
+):
     """HammingDistance Hamming Distance of hypervectors
 
     Counts the number of elements where A[i] != B[i], normalized to the
@@ -29,14 +31,35 @@ def HammingDistance(*hypervectors: ArrayLike, axis: Optional[int] = None):
         (arr,) where arr is (D, N):  sim(col_0, col_i) for i in 1..N-1
         (arr,) where arr is (D, N, M, ...): requires ``axis``
 
+    With ``mode="cross"`` and two binary ``{0, 1}`` batches ``A=(D, P)``,
+    ``B=(D, M)``, returns the full ``(P, M)`` cross-similarity matrix.
+
     Args:
         *hypervectors: Two hypervectors, or a single batch array
         axis: For a single ``(D, N, M, ...)`` batch, the batch axis to split on
+        mode: ``"pairwise"`` (default) or ``"cross"``
 
     Returns:
         Scalar similarity, or an array of similarities over the trailing axes
     """
-    a, b, is_torch, scalar = _normalize_similarity(*hypervectors, axis=axis)
+    a, b, is_torch, scalar = _normalize_similarity(*hypervectors, axis=axis, mode=mode)
+
+    if mode == "cross":
+        if is_torch:
+            assert torch is not None
+            a_t = torch.as_tensor(a).double()
+            b_t = torch.as_tensor(b).double()
+            dimension = a_t.shape[0]
+            matches = a_t.T @ b_t
+            mism = a_t.sum(dim=0)[:, None] + b_t.sum(dim=0)[None, :] - 2 * matches
+            return 1 - 2 * mism / dimension
+        # Inputs are cast to float64 for a BLAS matmul
+        a_n = np.asarray(a, dtype=np.float64)
+        b_n = np.asarray(b, dtype=np.float64)
+        dimension = a_n.shape[0]
+        matches = a_n.T @ b_n
+        mism = a_n.sum(axis=0)[:, None] + b_n.sum(axis=0)[None, :] - 2 * matches
+        return 1 - 2 * mism / dimension
 
     if is_torch:
         assert torch is not None

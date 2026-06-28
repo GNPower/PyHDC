@@ -9,10 +9,12 @@ from pyhdc.components.bundling.addition import (
 )
 from pyhdc.components.bundling.angles import AnglesOfElementAddition
 from pyhdc.components.bundling.binary import Disjunction, DisjunctionThinned
+from pyhdc.components.bundling.multiset import multibundle, multiset
 from pyhdc.components.bundling.normalized import (
     ElementAdditionConstantNormalized,
     ElementAdditionNormalized,
 )
+from pyhdc.components.bundling.selection import multirandsel, randsel
 from pyhdc.components.bundling.threshold import (
     ElementAdditionBinaryThreshold,
     ElementAdditionBipolarThreshold,
@@ -30,4 +32,8 @@ __all__ = [
     "ElementAdditionConstantNormalized",
     "ElementAdditionBinaryThreshold",
     "ElementAdditionBipolarThreshold",
+    "randsel",
+    "multirandsel",
+    "multiset",
+    "multibundle",
 ]

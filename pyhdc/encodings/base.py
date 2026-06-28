@@ -28,6 +28,12 @@ from pyhdc.components.elements import (
     UniformAngles,
     UniformBipolar,
 )
+from pyhdc.components.similarity import (
+    AngleDistance,
+    CosineSimilarity,
+    HammingDistance,
+    Overlap,
+)
 from pyhdc.components.unary import CyclicShift
 from pyhdc.config import get_default_backend, get_default_device
 from pyhdc.exceptions import GeneratorNotSupportedError
@@ -59,6 +65,14 @@ _BATCH_SAFE_BINDERS = frozenset(
         ElementAngleAddition,
         ElementAngleSubtraction,
     }
+)
+
+# Similarity functions that implement the matmul-backed cross mode (the (D, P) x
+# (D, M) -> (P, M) outer product). An encoding whose similarity_fn is outside this
+# set raises NotImplementedError on mode="cross" so the caller can fall back to a
+# per-pair oracle.
+SUPPORTED_CROSS_SIMILARITIES = frozenset(
+    {CosineSimilarity, HammingDistance, Overlap, AngleDistance}
 )
 
 
@@ -392,10 +406,12 @@ class Encoding(ABC):
         if device is None:
             device = self.device
 
+        # Build in numpy first so the encoding's numpy dtype carries over. torch.zeros
+        # does not accept a numpy dtype, so convert (preserving dtype) for the torch
+        # backend.
+        data = np.zeros(size, dtype=self._spec.dtype)
         if backend == "torch":
-            data = torch.zeros(size, dtype=self._spec.dtype, device=device)
-        else:
-            data = np.zeros(size, dtype=self._spec.dtype)
+            data = BackendManager.to_torch(data, device)
 
         return Hypervector(data, self, backend, None)
 
@@ -431,6 +447,7 @@ class Encoding(ABC):
         hvB: Optional[Union[ArrayLike, Hypervector, List]] = None,
         *,
         axis: Optional[int] = None,
+        mode: str = "pairwise",
     ) -> Union[float, ArrayLike, List[Union[float, ArrayLike]]]:
         """
         Compute similarity between hypervector(s).
@@ -443,21 +460,52 @@ class Encoding(ABC):
         - ``similarity(batch)`` with one ``(D, N)`` batch -> ``N-1`` scores of
           column 0 against each remaining column
         - ``similarity([..], [..])`` with two equal-length lists -> pairwise scores
+        - ``similarity(A, B, mode="cross")`` with ``A=(D, P)`` and ``B=(D, M)`` -> the
+          full ``(P, M)`` cross-similarity matrix (every column of A against every
+          column of B), matmul-backed
 
         Args:
             hvA: First hypervector(s) (Hypervector, array, or list), or a single
                 ``(D, N)`` batch when ``hvB`` is omitted.
             hvB: Optional second hypervector(s).
+            axis: Batch axis to reduce for a single ``(D, N, M, ...)`` batch.
+            mode: ``"pairwise"`` (default) or ``"cross"`` for the full outer product.
 
         Returns:
-            A scalar, a 1D array of scores, or a list of scores (for list inputs).
+            A scalar, a 1D array of scores, a ``(P, M)`` matrix (cross), or a list of
+            scores (for list inputs).
 
         Examples:
             >>> bsc.similarity(hv1, hv2)                       # scalar
             >>> enc.similarity(codebook)                       # col 0 vs the rest
             >>> bsc.similarity([hv1, hv2], [hv4, hv5])         # [sim(1,4), sim(2,5)]
+            >>> enc.similarity(protos, codebook, mode="cross") # (P, M) matrix
         """
         from pyhdc.components.input_formatting import _extract_data
+
+        if mode == "cross":
+            if isinstance(hvA, list) or isinstance(hvB, list):
+                raise ValueError(
+                    'similarity mode="cross" requires two batch operands, not lists'
+                )
+            if hvB is None:
+                raise ValueError(
+                    'similarity mode="cross" requires two batches, A=(D, P) and B=(D, M)'
+                )
+            if axis is not None:
+                raise ValueError('similarity mode="cross" does not accept axis=')
+            if self._spec.similarity_fn not in SUPPORTED_CROSS_SIMILARITIES:
+                raise NotImplementedError(
+                    f"cross similarity is not supported for "
+                    f"{self._spec.similarity_fn.__name__}; fall back to a per-pair "
+                    f"oracle"
+                )
+            result = self._spec.similarity_fn(
+                _extract_data(hvA), _extract_data(hvB), mode="cross"
+            )
+            if self._similarity_remap is not None:
+                result = self._similarity_remap(result)
+            return result
 
         # Batched if both are lists of equal length
         if isinstance(hvA, list) and isinstance(hvB, list):

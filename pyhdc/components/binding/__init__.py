@@ -11,6 +11,7 @@ from pyhdc.components.binding.convolution import (
     CircularConvolution,
     CircularCorrelation,
 )
+from pyhdc.components.binding.multibind import multibind
 from pyhdc.components.binding.multiplication import (
     ElementMultiplication,
     InverseMatrixMultiplication,
@@ -45,4 +46,5 @@ __all__ = [
     "VectorDerivedTransformation",
     "TransposeVectorDerivedTransformation",
     "ExclusiveOr",
+    "multibind",
 ]
