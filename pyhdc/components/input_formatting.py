@@ -258,7 +258,9 @@ def _normalize_binding(
 
 
 def _normalize_similarity(
-    *arrays: Union[ArrayLike, "Hypervector"], axis: Optional[int] = None
+    *arrays: Union[ArrayLike, "Hypervector"],
+    axis: Optional[int] = None,
+    mode: str = "pairwise",
 ) -> Tuple[ArrayLike, ArrayLike, bool, bool]:
     """
     Normalize similarity inputs to an aligned ``(A, B)`` pair reduced over axis 0.
@@ -274,10 +276,34 @@ def _normalize_similarity(
     - mixed ranks (e.g. ``(D,)`` vs ``(D, N, M)``) -> lower-rank operand padded with
       trailing length-1 axes, then broadcast
 
+    With ``mode="cross"`` the two inputs are returned unaligned as the raw ``(D, P)``
+    and ``(D, M)`` operands (no column split, no padding) for the full outer-product
+    cross-similarity path, ``scalar`` is always False.
+
     Returns:
         Tuple of ``(A, B, is_torch, scalar)``. ``scalar`` is True only when both
         inputs were a single 1D vector (return the result as a Python float).
     """
+    if mode == "cross":
+        if axis is not None:
+            raise ValueError('similarity mode="cross" does not accept axis=')
+        data_arrays, is_torch, _ = _normalize_inputs(*arrays)
+        if len(data_arrays) != 2:
+            raise ValueError(
+                'similarity mode="cross" requires exactly two (D, P) and (D, M) inputs'
+            )
+        a, b = data_arrays[0], data_arrays[1]
+        if getattr(a, "ndim", 1) != 2 or getattr(b, "ndim", 1) != 2:
+            raise ValueError(
+                'similarity mode="cross" requires 2D (D, P) and (D, M) batches'
+            )
+        if a.shape[0] != b.shape[0]:
+            raise ValueError(
+                f"cross similarity requires matching dimension D, "
+                f"got {a.shape[0]} and {b.shape[0]}"
+            )
+        return a, b, is_torch, False
+
     data_arrays, is_torch, _ = _normalize_inputs(*arrays)
 
     if len(data_arrays) == 1:

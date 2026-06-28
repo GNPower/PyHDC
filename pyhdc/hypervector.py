@@ -255,7 +255,11 @@ class Hypervector:
         return self.to_torch(device_str)
 
     def similarity(
-        self, other: Optional["Hypervector"] = None, *, axis: Optional[int] = None
+        self,
+        other: Optional["Hypervector"] = None,
+        *,
+        axis: Optional[int] = None,
+        mode: str = "pairwise",
     ) -> Union[
         float, np.ndarray, "torch.Tensor"
     ]:  # pyright: ignore[reportInvalidTypeForm]
@@ -268,10 +272,19 @@ class Hypervector:
                 remaining column is returned.
             axis: For a single ``(D, N, M, ...)`` batch (``other`` omitted), the
                 batch axis along which to split column 0 against the rest.
+            mode: ``"pairwise"`` (default) or ``"cross"``. With ``"cross"``, ``self``
+                ``(D, P)`` and ``other`` ``(D, M)`` give the full ``(P, M)`` matrix.
 
         Returns:
             Similarity score(s)
         """
+        if mode == "cross":
+            if other is None:
+                raise ValueError(
+                    'similarity mode="cross" requires a second hypervector'
+                )
+            self._check_compatibility(other)
+            return self._encoding.similarity(self, other, mode="cross")
         if other is None:
             return self._encoding.similarity(self, axis=axis)
         self._check_compatibility(other)
@@ -496,6 +509,21 @@ def unbind(*hypervectors: Hypervector) -> Hypervector:
     if not hypervectors:
         raise ValueError("At least one hypervector required")
     return hypervectors[0].unbind(*hypervectors[1:])
+
+
+def similarity(
+    a: Hypervector,
+    b: Optional[Hypervector] = None,
+    *,
+    axis: Optional[int] = None,
+    mode: str = "pairwise",
+) -> Union[float, np.ndarray, "torch.Tensor"]:  # pyright: ignore[reportInvalidTypeForm]
+    """Compute similarity between hypervectors (pairwise by default, or cross).
+
+    ``similarity(A, B, mode="cross")`` with ``A=(D, P)`` and ``B=(D, M)`` returns the
+    full ``(P, M)`` cross-similarity matrix. See :meth:`Hypervector.similarity`.
+    """
+    return a.similarity(b, axis=axis, mode=mode)
 
 
 def permute(hypervector: Hypervector, shift: int = 1) -> Hypervector:

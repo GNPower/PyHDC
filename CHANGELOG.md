@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Data encoders in the new `pyhdc.encoders` package. Each wraps an `Encoding`
+  instance and maps a value, feature vector, or batch to a dimension-first
+  `(D, B)` Hypervector via `encode` (or calling the encoder directly). Codebook
+  encoders: `Empty`, `Identity`, `Random`, `Level`, `Thermometer`, `Circular`.
+  Functional encoders: `Projection`, `Sinusoid`, `Density`, `FractionalPower`.
+  Family-specific encoders raise `NotImplementedError` where the family has no
+  definition (`Identity` on VTB/MBAT/BSDC, Thermometer/Density on continuous or
+  phase families, Projection on BSC/BSDC, FractionalPower outside FHRR and the HRR
+  family). `Identity` returns the binding-identity element (the `e` where
+  `bind(x, e) == x`): all-ones for MAP, all-zeros for BSC, the impulse for the HRR
+  family, zero phase for FHRR.
+- Family-aware basis builders in the new `pyhdc.components.basis` package:
+  `empty`, `identity`, `random`, `level`, `circular`, `thermometer`, plus
+  `family_endpoints`. Each returns a `(D, count)` codebook in the encoding's value
+  domain and backend.
+- Cross similarity. `similarity(A, B, mode="cross")` with `A=(D, P)` and
+  `B=(D, M)` returns the full `(P, M)` matrix of every column of A against every
+  column of B, backed by a single matmul with no `(D, P, M)` intermediate.
+  Available on `Encoding.similarity`, `Hypervector.similarity`, and the new
+  module-level `pyhdc.similarity`. Implemented for Cosine, Hamming, Overlap, and
+  Angle. An encoding whose metric is outside that set raises `NotImplementedError`
+  so the caller can fall back to a per-pair loop. Binary metrics cast to float64
+  for a BLAS matmul, cosine guards a zero-norm column (scores 0, not nan).
+- Module-level convenience function `pyhdc.similarity`.
+- Composable component helpers in `pyhdc.components`: `randsel` / `multirandsel`
+  (random-selection bundling), `multiset` / `multibundle` / `multibind` (reduce a
+  stacked batch axis), and `hard_quantize` / `soft_quantize`.
+- `MAP_I_Bits` gains a `bit_width` parameter to set the signed saturation width
+  explicitly (overrides `mask`).
+
+### Fixed
+
+- `Encoding.zeros` now works on the torch backend. It previously passed the
+  encoding's numpy dtype straight to `torch.zeros`, which raised a `TypeError`. It
+  now builds in numpy and converts, preserving the dtype.
+- `MAP_I_Bits` now honors its bit width. The post-bundle saturation bounds and the
+  storage dtype are derived from `mask` (which must be `2**k - 1`) or the new
+  `bit_width`, instead of being hard-coded to int32 with the `mask` ignored. The
+  default `mask=(2**32) - 1` is unchanged (int32 bounds, int32 storage). A narrow
+  width now saturates correctly (an 8-bit mask clips to `[-128, 127]` and stores
+  int8), a width wider than 32 widens the storage dtype (up to int64) so the sum
+  no longer wraps on cast.
+
+### Changed
+
+- **Breaking (narrow):** `MAP_I_Bits` rejects a `mask` that is not of the form
+  `2**k - 1` (contiguous low bits). Such a value was previously accepted and
+  silently ignored (always clipping at int32). It now raises `ValueError`. Pass
+  `bit_width=k` for an explicit k-bit limit. Default construction is unaffected.
+
 ## [2.1.0] - 2026-06-18
 
 ### Added
