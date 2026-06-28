@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.2.0] - 2026-06-27
 
 ### Added
 
@@ -33,9 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so the caller can fall back to a per-pair loop. Binary metrics cast to float64
   for a BLAS matmul, cosine guards a zero-norm column (scores 0, not nan).
 - Module-level convenience function `pyhdc.similarity`.
-- Composable component helpers in `pyhdc.components`: `randsel` / `multirandsel`
-  (random-selection bundling), `multiset` / `multibundle` / `multibind` (reduce a
-  stacked batch axis), and `hard_quantize` / `soft_quantize`.
+- Composable component helpers, each in an operation-named module: random-selection
+  bundling `randsel` / `multirandsel` and additive `multiset` / `multibundle` in
+  `pyhdc.components.bundling`, multiplicative `multibind` in `pyhdc.components.binding`,
+  and `hard_quantize` / `soft_quantize` in `pyhdc.components.quantization`.
 - `MAP_I_Bits` gains a `bit_width` parameter to set the signed saturation width
   explicitly (overrides `mask`).
 
@@ -283,7 +284,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyproject.toml` with setuptools build configuration
 - GitHub Actions CI: lint, test, PyPI publish workflows
 
-[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/GNPower/PyHDC/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/GNPower/PyHDC/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/GNPower/PyHDC/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/GNPower/PyHDC/compare/v1.0.1...v1.1.0
