@@ -76,9 +76,12 @@ def test_type_aliases_importable():
 
 
 def test_submodules_importable():
+    # Only the submodules that ship in the built package. pyhdc.recovery is
+    # excluded from the distribution (see pyproject.toml packages.find exclude),
+    # so it must not be imported here or this test fails on an installed build.
     import pyhdc.components  # noqa: F401
+    import pyhdc.encoders  # noqa: F401
     import pyhdc.generation  # noqa: F401
-    import pyhdc.recovery  # noqa: F401
 
 
 def test_torch_available_flag_exists():
