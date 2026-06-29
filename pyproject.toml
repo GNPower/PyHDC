@@ -1,6 +1,6 @@
 [project]
 name = "PyHDC"
-version = "2.2.1"
+version = "2.2.2"
 dynamic = [
     "dependencies",
 ]
@@ -58,7 +58,7 @@ dependencies = {file = ["requirements.txt"]}
 
 
 [tool.bumpversion]
-current_version = "2.2.1"
+current_version = "2.2.2"
 commit = true
 tag = true
 

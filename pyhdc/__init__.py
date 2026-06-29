@@ -37,7 +37,7 @@ Advanced Usage:
 """
 
 # Version information
-__version__ = "2.2.1"
+__version__ = "2.2.2"
 __author__ = "GNPower"
 
 # Submodules are available for direct import

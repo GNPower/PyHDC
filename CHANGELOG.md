@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2] - 2026-06-29
+
+### Fixed
+
+- Bundling (and any operation that normalizes its inputs) crashed on a raw array
+  whose `.data` access raises something other than `AttributeError`.
+  `_is_hypervector` probed `data` before `encoding`/`backend`, which for an ml_dtypes
+  array (such as bfloat16, whose char kind is `'E'`) numpy raises
+  `ValueError: cannot include dtype 'E' in a buffer` when `.data` is accessed, and
+  `hasattr` only handles an `AttributeError`, so the `ValueError` propagated. PyHDC
+  now checks `encoding`/`backend` first, so a raw array evaluates to `False` before
+  the `.data` check raises an exception. Hypervectors are unaffected.
+
 ## [2.2.1] - 2026-06-28
 
 ### Fixed
@@ -460,7 +473,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pyproject.toml` with setuptools build configuration
 - GitHub Actions CI: lint, test, PyPI publish workflows
 
-[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.2.1...HEAD
+[Unreleased]: https://github.com/GNPower/PyHDC/compare/v2.2.2...HEAD
+[2.2.2]: https://github.com/GNPower/PyHDC/compare/v2.2.1...v2.2.2
 [2.2.1]: https://github.com/GNPower/PyHDC/compare/v2.2.0...v2.2.1
 [2.2.0]: https://github.com/GNPower/PyHDC/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/GNPower/PyHDC/compare/v2.0.0...v2.1.0

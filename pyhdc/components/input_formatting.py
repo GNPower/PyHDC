@@ -20,7 +20,13 @@ if TYPE_CHECKING:
 
 def _is_hypervector(obj: Any) -> bool:
     """Check if an object is a Hypervector without importing the class."""
-    return hasattr(obj, "data") and hasattr(obj, "encoding") and hasattr(obj, "backend")
+    # Order matters: probe ``encoding``/``backend`` before ``data``. A raw array
+    # has no ``encoding``, so the check evaluates to False before ``data`` is
+    # ever checked. Checking ``data`` on some raw arrays raises exceptions (numpy
+    # raises ``ValueError: cannot include dtype 'E' in a buffer`` for ml_dtypes
+    # such as bfloat16, whose char kind is ``'E'``), and ``hasattr`` only catches
+    # ``AttributeError``, so that ValueError would otherwise propagate and crash.
+    return hasattr(obj, "encoding") and hasattr(obj, "backend") and hasattr(obj, "data")
 
 
 def _extract_data(obj: Union[ArrayLike, "Hypervector"]) -> ArrayLike:
